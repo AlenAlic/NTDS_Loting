@@ -5,7 +5,7 @@ import openpyxl
 from random import randint
 import random
 # from collections import Counter
-# import time
+import time
 import logging
 logging.basicConfig(filename='loting.log', filemode='w', level=logging.DEBUG)
 
@@ -260,6 +260,7 @@ def create_competing_cities_list():
 
 
 def main():
+    start_time = time.time()
     # Connect to database and create a cursor
     conn = sql.connect(database_name)
     curs = conn.cursor()
@@ -410,6 +411,7 @@ def main():
     # Close cursor and connection
     curs.close()
     conn.close()
+    print("--- %s seconds ---" % (time.time() - start_time))
     print('Done!')
 
 if __name__ == '__main__':
