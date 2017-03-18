@@ -30,6 +30,7 @@ selected_list = 'selected_people'
 team_list = 'team_list'
 partners_selection_pool = 'partners_selection_pool'
 partners_list = 'partners_list'
+preselected_people_list = 'preselected_people'
 
 # more names
 breiten = 'Breiten'
@@ -97,12 +98,47 @@ def move_selected_contestant(identifier, connection, cursor):
         logging.info('Selected {} for the NTDS'.format(identifier))
 
 
-def copy_to_selection_pool(list_of_ids, connection, cursor):
+def copy_to_selection_pool(selected_people, connection, cursor):
     """Copies a number of dancers to the selection pool, given a list of id's"""
+    list_of_ids = [(row[gen_dict[sql_id]],) for row in selected_people]
     query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE {id} = ?;'\
         .format(tn1=partners_selection_pool, tn2=signup_list, id=sql_id)
     cursor.executemany(query, list_of_ids)
     connection.commit()
+
+
+def copy_to_preselection(preselected_people, connection, cursor):
+    """Copies a number of dancers to the selection pool, given a list of people"""
+    list_of_ids = [(row[gen_dict[sql_id]],) for row in preselected_people]
+    query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE {id} = ?;'\
+        .format(tn1=preselected_people_list, tn2=signup_list, id=sql_id)
+    cursor.executemany(query, list_of_ids)
+    # query = 'DELETE FROM {tn1} WHERE {id} = ?;'.format(tn1=signup_list, id=sql_id)
+    # cursor.executemany(query, list_of_ids)
+    connection.commit()
+
+
+def find_signed_partner(dancer, connection, cursor):
+    """Finds the/a partner for a dancer, given id"""
+    dancer_id = dancer[gen_dict[sql_id]]
+    partner_id = None
+    ballroom_partner = dancer[gen_dict[sql_bp]]
+    latin_partner = dancer[gen_dict[sql_lp]]
+    team = dancer[gen_dict[sql_team]]
+    # Check if the contestant already has signed up with a partner
+    if isinstance(ballroom_partner, int):
+        partner_id = ballroom_partner
+    if all([isinstance(latin_partner, int), partner_id is None]):
+        partner_id = latin_partner
+    # query = 'SELECT * from {tn} WHERE {team} != ?'.format(tn=preselected_people_list, team=sql_team)
+    # potential_partners = cursor.execute(query).fetchall()
+    # if len(potential_partners) > 0:
+    #     print('')
+    if partner_id is None:
+        logging.info('{id1} has not signed with a partner'.format(id1=dancer_id))
+    else:
+        logging.info('Matched {id1} and {id2} together'.format(id1=dancer_id, id2=partner_id))
+    return partner_id
 
 
 def find_partner(identifier, connection, cursor):
@@ -164,19 +200,58 @@ def find_partner(identifier, connection, cursor):
     return partner_id
 
 
-def create_paar(lead, follow, connection, cursor):
+def find_beginner_partner(identifier, connection, cursor):
+    """Finds the/a partner for a dancer, given id"""
+    partner_id = None
+    query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=signup_list, id=sql_id)
+    data = cursor.execute(query, (identifier,)).fetchone()
+    ballroom_level = data[gen_dict[sql_bn]]
+    latin_level = data[gen_dict[sql_ln]]
+    ballroom_partner = data[gen_dict[sql_bp]]
+    latin_partner = data[gen_dict[sql_lp]]
+    rol = data[gen_dict[sql_br]]
+    # ballroom_mandatory_date = data[gen_dict[sql_bbd]]
+    # latin_mandatory_date = data[gen_dict[sql_lbd]]
+    # team_captain = data[gen_dict[sql_tc]]
+    team = data[gen_dict[sql_team]]
+    # Check if the contestant already has signed up with a partner
+    if isinstance(ballroom_partner, int):
+        partner_id = ballroom_partner
+    if all([isinstance(latin_partner, int), partner_id is None]):
+        partner_id = latin_partner
+    # If the contestant is a beginner, and has no partner, find a partner
+    # schrijf speciale select beginner
+    if all([ballroom_level == beginner, latin_level == beginner, partner_id is None]):
+        query = 'SELECT * FROM {tn} where {bn} = ? AND {ln} = ? AND {bp} = "" AND {lp} = "" AND {br} != ? ' \
+                'AND {team} != ?' \
+            .format(tn=signup_list, bn=sql_bn, ln=sql_ln, bp=sql_bp, lp=sql_lp, br=sql_br, team=sql_team)
+        potential_partners = cursor.execute(query, (ballroom_level, latin_level, rol, team)).fetchall()
+        number_of_potential_partners = len(potential_partners)
+        if number_of_potential_partners > 0:
+            random_num = randint(0, number_of_potential_partners - 1)
+            partner_id = potential_partners[random_num][gen_dict[sql_id]]
+    connection.commit()
+    if partner_id is None:
+        logging.info('Found no match for {id1}'.format(id1=identifier))
+    else:
+        logging.info('Matched {id1} and {id2} together'.format(id1=identifier, id2=partner_id))
+    return partner_id
+
+
+def create_pair(lead, follow, connection, cursor):
     """Temp"""
+    lead_team = get_team(lead, connection=connection, cursor=cursor)
+    follow_team = get_team(follow, connection=connection, cursor=cursor)
     query = 'INSERT INTO {tn} VALUES (?, ?, ?, ?)'.format(tn=partners_list)
-    cursor.execute(query, (lead, follow, get_team(lead, connection=connection, cursor=cursor),
-                           get_team(follow, connection=connection, cursor=cursor)))
-    query = 'DELETE FROM {tn} WHERE id = ?'.format(tn=partners_selection_pool)
+    cursor.execute(query, (lead, follow, lead_team, follow_team))
+    query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=partners_selection_pool, id=sql_id)
     cursor.executemany(query, [(lead,), (follow,)])
     connection.commit()
 
 
 def no_partner_found(identifier, connection, cursor):
     """Temp"""
-    query = 'DELETE FROM {tn} WHERE id = ?'.format(tn=partners_selection_pool)
+    query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=partners_selection_pool, id=sql_id)
     cursor.execute(query, (identifier,))
     connection.commit()
 
@@ -202,12 +277,13 @@ def max_rc(direction, worksheet):
 def create_tables(connection, cursor):
     """"Drops existing tables and creates new ones"""
     # Drop all existing tables (from previous run)
-    tables_to_drop = [signup_list, selected_list, team_list, partners_list, partners_selection_pool]
+    tables_to_drop = [signup_list, selected_list, team_list,
+                      partners_list, partners_selection_pool, preselected_people_list]
     for item in tables_to_drop:
         query = drop_table_query.format(item)
         cursor.execute(query)
     # Create new tables
-    dancer_list_tables = [signup_list, selected_list, partners_selection_pool]
+    dancer_list_tables = [signup_list, selected_list, partners_selection_pool, preselected_people_list]
     for item in dancer_list_tables:
         query = dancers_list_query.format(item)
         cursor.execute(query)
@@ -288,16 +364,54 @@ def main():
         move_selected_contestant(partner_id, connection=conn, cursor=curs)
     conn.commit()
 
+    # Select the beginners of cities that have less than the maximum guaranteed
+    guaranteed_beginners = []
+    for city in competing_cities:
+        query = 'SELECT * FROM {tn1} WHERE {bn} = ? AND {ln} = ? AND {team} = ?'\
+            .format(tn1=signup_list, bn=sql_bn, ln=sql_ln, level=beginner, team=sql_team)
+        city_beginners = curs.execute(query, (beginner, beginner, city)).fetchall()
+        number_of_city_beginners = len(city_beginners)
+        if number_of_city_beginners <= max_fixed_beginners:
+            guaranteed_beginners.extend(city_beginners)
+    copy_to_preselection(guaranteed_beginners, connection=conn, cursor=curs)
+    # If the beginners have signed with a partner, group them and place them in the preselected pairs
+    # If the beginners have not signed with a partner, place them in the preselected beginners
+    for beg in guaranteed_beginners:
+        beginner_id = beg[gen_dict[sql_id]]
+        partner_id = find_signed_partner(beg, connection=conn, cursor=curs)
+        if partner_id is not None:
+            create_pair(beginner_id, partner_id, connection=conn, cursor=curs)
+    # Transfer all beginners to selection pool and get a list of beginners from the city
+    query = 'SELECT * FROM {tn1} WHERE {bn} = "{level}" AND {ln} = "{level}"' \
+        .format(tn1=signup_list, bn=sql_bn, ln=sql_ln, level=beginner)
+    all_beginners = curs.execute(query).fetchall()
+    copy_to_selection_pool(all_beginners, connection=conn, cursor=curs)
+    for beg in guaranteed_beginners:
+        beginner_id = beg[gen_dict[sql_id]]
+        partner_id = find_partner(beg, connection=conn, cursor=curs)
+        if partner_id is not None:
+            create_pair(beginner_id, partner_id, connection=conn, cursor=curs)
+    query = 'SELECT * FROM {tn}'.format(tn=partners_selection_pool)
+    all_beginners = curs.execute(query).fetchall()
+    number_of_beginners = len(all_beginners)
+    while number_of_beginners > 0:
+        random_int = randint(0, number_of_beginners - 1)
+        beginner_id = all_beginners[random_int][gen_dict[sql_id]]
+        partner_id = find_partner(beginner_id, connection=conn, cursor=curs)
+        if partner_id is None:
+            partner_id = find_beginner_partner(beginner_id, connection=conn, cursor=curs)
+        partner_team = get_team(partner_id, connection=conn, cursor=curs)
+        if partner_id is not None:
+            if all_beginners[random_int][gen_dict[sql_br]] == 'Lead':
+                create_pair(lead=beginner_id, follow=partner_id, connection=conn, cursor=curs)
+            else:
+                create_pair(lead=partner_id, follow=beginner_id, connection=conn, cursor=curs)
+        else:
+            no_partner_found(beginner_id, connection=conn, cursor=curs)
+        query = 'SELECT * FROM {tn}'.format(tn=partners_selection_pool)
+        all_beginners = curs.execute(query).fetchall()
+        number_of_beginners = len(all_beginners)
     # Get beginners
-    # min_city_beginners_accepted = []
-    # for city in competing_cities:
-    #     query = 'SELECT * FROM {tn1} WHERE {bn} = "{level}" AND {ln} = "{level}" AND {team} = "{city}"'\
-    #         .format(tn1=signup_list, bn=sql_bn, ln=sql_ln, level=beginner, team=sql_team, city=city)
-    #     number_of_city_beginners = len(curs.execute(query).fetchall())
-    #     if number_of_city_beginners >= max_fixed_beginners:
-    #         number_of_city_beginners = max_fixed_beginners
-    #     min_city_beginners_accepted.append(number_of_city_beginners)
-    # Reset the tables used to select partners
     max_number_of_beginners = 0
     for city in competing_cities:
         query = 'SELECT * FROM {tn1} WHERE {bn} = "{level}" AND {ln} = "{level}" AND {team} = "{city}"' \
@@ -322,8 +436,7 @@ def main():
     query = 'SELECT * FROM {tn1} WHERE {bn} = "{level}" AND {ln} = "{level}"' \
         .format(tn1=signup_list, bn=sql_bn, ln=sql_ln, level=beginner)
     all_beginners = curs.execute(query).fetchall()
-    list_of_ids = [(row[gen_dict[sql_id]],) for row in all_beginners]
-    copy_to_selection_pool(list_of_ids, connection=conn, cursor=curs)
+    copy_to_selection_pool(all_beginners, connection=conn, cursor=curs)
     number_of_beginners = len(all_beginners)
     while number_of_beginners > 0:
         random_int = randint(0, number_of_beginners - 1)
@@ -331,9 +444,9 @@ def main():
         partner_id = find_partner(beginner_id, connection=conn, cursor=curs)
         if partner_id is not None:
             if all_beginners[random_int][gen_dict[sql_br]] == 'Lead':
-                create_paar(lead=beginner_id, follow=partner_id, connection=conn, cursor=curs)
+                create_pair(lead=beginner_id, follow=partner_id, connection=conn, cursor=curs)
             else:
-                create_paar(lead=partner_id, follow=beginner_id, connection=conn, cursor=curs)
+                create_pair(lead=partner_id, follow=beginner_id, connection=conn, cursor=curs)
         else:
             no_partner_found(beginner_id, connection=conn, cursor=curs)
         query = 'SELECT * FROM {tn}'.format(tn=partners_selection_pool)
