@@ -16,6 +16,12 @@ INFO:root:Selected 56 for the NTDS
 INFO:root:Matched 55 and 60 together
 INFO:root:Selected 55 for the NTDS
 INFO:root:Selected 60 for the NTDS
-INFO:root:32 has not signed with a partner
-INFO:root:33 has not signed with a partner
-INFO:root:34 has not signed with a partner
+INFO:root:Matched 32 and 51 together
+INFO:root:Matched 33 and 13 together
+INFO:root:Matched 34 and 65 together
+INFO:root:Matched 44 and 49 together
+INFO:root:Matched 69 and 70 together
+INFO:root:Matched 24 and 77 together
+INFO:root:Matched 23 and 14 together
+INFO:root:Found no match for 52
+INFO:root:Matched 41 and 39 together
