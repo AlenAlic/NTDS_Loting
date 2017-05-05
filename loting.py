@@ -742,13 +742,13 @@ def main():
     query = 'SELECT * FROM {tn}'.format(tn=selected_list, num=sql_num_con)
     selected_dancers = curs.execute(query).fetchall()
     number_of_selected_dancers = len(selected_dancers)
-    max_iterations = max_contestants - buffer_for_selection - number_of_selected_dancers
-    max_iterations = int(round((max_iterations + 1) / 2))
+    # max_iterations = max_contestants - buffer_for_selection - number_of_selected_dancers
+    # max_iterations = int(round((max_iterations + 1) / 2))
     query = 'SELECT * FROM {tn} ORDER BY RANDOM()'.format(tn=selection_list)
     available_dancers = curs.execute(query).fetchall()
     number_of_available_dancers = len(available_dancers)
-    if number_of_available_dancers < int(round((number_of_available_dancers + 1) / 2)):
-        max_iterations = int(round((number_of_available_dancers + 1) / 2))
+    # if number_of_available_dancers < int(round((number_of_available_dancers + 1) / 2)):
+    #     max_iterations = int(round((number_of_available_dancers + 1) / 2))
     if number_of_available_dancers > 0:
         random_order = random.sample(range(0, number_of_available_dancers), number_of_available_dancers)
         for num in range(len(random_order)):
