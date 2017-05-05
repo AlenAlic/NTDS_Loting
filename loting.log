@@ -1,66 +1,161 @@
 INFO:root:Matched 4 and 3 together
 INFO:root:Selected 4 for the NTDS
 INFO:root:Selected 3 for the NTDS
-INFO:root:Found no match for 8
+INFO:root:Matched 8 and 48 together
 INFO:root:Selected 8 for the NTDS
-INFO:root:Matched 30 and 31 together
+INFO:root:Selected 48 for the NTDS
+INFO:root:Matched 30 and 99 together
 INFO:root:Selected 30 for the NTDS
+INFO:root:Selected 99 for the NTDS
+INFO:root:Matched 31 and 7 together
 INFO:root:Selected 31 for the NTDS
-INFO:root:Matched 49 and 51 together
+INFO:root:Selected 7 for the NTDS
+INFO:root:Matched 49 and 50 together
 INFO:root:Selected 49 for the NTDS
-INFO:root:Selected 51 for the NTDS
-INFO:root:Matched 50 and 55 together
 INFO:root:Selected 50 for the NTDS
-INFO:root:Selected 55 for the NTDS
-INFO:root:Matched 28 and 37 together
-INFO:root:Matched 21 and 68 together
-INFO:root:Matched 22 and 63 together
-INFO:root:Matched 25 and 43 together
-INFO:root:Matched 20 and 15 together
-INFO:root:Matched 26 and 41 together
-INFO:root:Matched 24 and 42 together
-INFO:root:Matched 10 and 18 together
-INFO:root:Matched 16 and 40 together
-INFO:root:Matched 27 and 35 together
-INFO:root:Matched 13 and 61 together
-INFO:root:Matched 14 and 23 together
-INFO:root:Matched 29 and 66 together
-INFO:root:Matched 12 and 11 together
-INFO:root:Matched 17 and 60 together
-INFO:root:Matched 19 and 57 together
-INFO:root:Selected 25 for the NTDS
-INFO:root:Selected 43 for the NTDS
-INFO:root:Selected 15 for the NTDS
-INFO:root:Selected 20 for the NTDS
-INFO:root:Selected 42 for the NTDS
+INFO:root:Matched 86 and 88 together
+INFO:root:Selected 86 for the NTDS
+INFO:root:Selected 88 for the NTDS
+INFO:root:Matched 87 and 92 together
+INFO:root:Selected 87 for the NTDS
+INFO:root:Selected 92 for the NTDS
+INFO:root:Matched 32 and 24 together (limited)
+INFO:root:Selected 32 for the NTDS
 INFO:root:Selected 24 for the NTDS
-INFO:root:Matched 40 and 19 together
-INFO:root:Matched 39 and 44 together
-INFO:root:Matched 45 and 26 together
-INFO:root:Matched 36 and 34 together
-INFO:root:Matched 38 and 67 together
-INFO:root:Matched 47 and 27 together
-INFO:root:Matched 46 and 68 together
-INFO:root:Matched 41 and 29 together
-INFO:root:Matched 35 and 21 together
-INFO:root:Matched 37 and 63 together
-INFO:root:Selected 37 for the NTDS
-INFO:root:Selected 63 for the NTDS
-INFO:root:Selected 44 for the NTDS
-INFO:root:Selected 39 for the NTDS
-INFO:root:Matched 59 and 58 together
-INFO:root:Matched 68 and 40 together
-INFO:root:Matched 57 and 47 together
-INFO:root:Matched 65 and 64 together
-INFO:root:Matched 66 and 28 together
-INFO:root:Matched 61 and 45 together
-INFO:root:Matched 60 and 17 together
-INFO:root:Matched 67 and 46 together
-INFO:root:Selected Utrecht for the NTDS
-INFO:root:Selected Utrecht for the NTDS
-INFO:root:Selected Utrecht for the NTDS
-INFO:root:Selected Utrecht for the NTDS
-INFO:root:Selected 58 for the NTDS
-INFO:root:Selected 59 for the NTDS
+INFO:root:Matched 33 and 34 together (limited)
+INFO:root:Selected 33 for the NTDS
+INFO:root:Selected 34 for the NTDS
+INFO:root:Matched 65 and 103 together (limited)
 INFO:root:Selected 65 for the NTDS
+INFO:root:Selected 103 for the NTDS
+INFO:root:Matched 105 and 21 together (limited)
+INFO:root:Selected 105 for the NTDS
+INFO:root:Selected 21 for the NTDS
+INFO:root:Matched 60 and 98 together (limited)
+INFO:root:Selected 60 for the NTDS
+INFO:root:Selected 98 for the NTDS
+INFO:root:Matched 57 and 19 together (limited)
+INFO:root:Selected 57 for the NTDS
+INFO:root:Selected 19 for the NTDS
+INFO:root:Matched 58 and 63 together (limited)
+INFO:root:Selected 58 for the NTDS
+INFO:root:Selected 63 for the NTDS
+INFO:root:Matched 25 and 110 together (limited)
+INFO:root:Selected 25 for the NTDS
+INFO:root:Selected 110 for the NTDS
+INFO:root:Matched 20 and 15 together (limited)
+INFO:root:Selected 20 for the NTDS
+INFO:root:Selected 15 for the NTDS
+INFO:root:Matched 78 and 47 together (limited)
+INFO:root:Selected 78 for the NTDS
+INFO:root:Selected 47 for the NTDS
+INFO:root:Matched 93 and 68 together (limited)
+INFO:root:Selected 93 for the NTDS
+INFO:root:Selected 68 for the NTDS
+INFO:root:Matched 100 and 35 together (limited)
+INFO:root:Selected 100 for the NTDS
+INFO:root:Selected 35 for the NTDS
+INFO:root:Matched 45 and 46 together (limited)
+INFO:root:Selected 45 for the NTDS
+INFO:root:Selected 46 for the NTDS
+INFO:root:Matched 54 and 97 together (limited)
+INFO:root:Selected 54 for the NTDS
+INFO:root:Selected 97 for the NTDS
+INFO:root:Matched 13 and 73 together (limited)
+INFO:root:Selected 13 for the NTDS
+INFO:root:Selected 73 for the NTDS
+INFO:root:Matched 108 and 17 together (limited)
+INFO:root:Selected 108 for the NTDS
+INFO:root:Selected 17 for the NTDS
+INFO:root:Matched 111 and 66 together (limited)
+INFO:root:Selected 111 for the NTDS
+INFO:root:Selected 66 for the NTDS
+INFO:root:Matched 12 and 11 together (limited)
+INFO:root:Selected 12 for the NTDS
+INFO:root:Selected 11 for the NTDS
+INFO:root:Matched 39 and 82 together (limited)
+INFO:root:Selected 39 for the NTDS
+INFO:root:Selected 82 for the NTDS
+INFO:root:Matched 41 and 94 together (limited)
+INFO:root:Selected 41 for the NTDS
+INFO:root:Selected 94 for the NTDS
+INFO:root:Matched 76 and 89 together (limited)
+INFO:root:Selected 76 for the NTDS
+INFO:root:Selected 89 for the NTDS
+INFO:root:Matched 28 and 43 together (limited)
+INFO:root:Selected 28 for the NTDS
+INFO:root:Selected 43 for the NTDS
+INFO:root:Matched 109 and 69 together (limited)
+INFO:root:Selected 109 for the NTDS
+INFO:root:Selected 69 for the NTDS
+INFO:root:Matched 29 and 36 together (limited)
+INFO:root:Selected 29 for the NTDS
+INFO:root:Selected 36 for the NTDS
+INFO:root:Matched 107 and 42 together (limited)
+INFO:root:Selected 107 for the NTDS
+INFO:root:Selected 42 for the NTDS
+INFO:root:Matched 75 and 9 together (limited)
+INFO:root:Selected 75 for the NTDS
+INFO:root:Selected 9 for the NTDS
+INFO:root:Matched 102 and 101 together (limited)
+INFO:root:Selected 102 for the NTDS
+INFO:root:Selected 101 for the NTDS
+INFO:root:Matched 80 and 22 together (limited)
+INFO:root:Selected 80 for the NTDS
+INFO:root:Selected 22 for the NTDS
+INFO:root:Matched 38 and 37 together (limited)
+INFO:root:Selected 38 for the NTDS
+INFO:root:Selected 37 for the NTDS
+INFO:root:Matched 16 and 62 together
+INFO:root:Selected 16 for the NTDS
+INFO:root:Selected 62 for the NTDS
+INFO:root:Matched 40 and 67 together
+INFO:root:Selected 40 for the NTDS
+INFO:root:Selected 67 for the NTDS
+INFO:root:Matched 1 and 2 together
+INFO:root:Selected 1 for the NTDS
+INFO:root:Selected 2 for the NTDS
+INFO:root:Matched 104 and 27 together
+INFO:root:Selected 104 for the NTDS
+INFO:root:Selected 27 for the NTDS
+INFO:root:Found no match for 71
+INFO:root:Found no match for 83
+INFO:root:Matched 23 and 14 together
+INFO:root:Selected 23 for the NTDS
+INFO:root:Selected 14 for the NTDS
+INFO:root:Matched 64 and 26 together
 INFO:root:Selected 64 for the NTDS
+INFO:root:Selected 26 for the NTDS
+INFO:root:Matched 6 and 90 together
+INFO:root:Selected 6 for the NTDS
+INFO:root:Selected 90 for the NTDS
+INFO:root:Matched 106 and 59 together
+INFO:root:Selected 106 for the NTDS
+INFO:root:Selected 59 for the NTDS
+INFO:root:Matched 55 and 53 together
+INFO:root:Selected 55 for the NTDS
+INFO:root:Selected 53 for the NTDS
+INFO:root:Found no match for 74
+INFO:root:Matched 10 and 18 together
+INFO:root:Selected 10 for the NTDS
+INFO:root:Selected 18 for the NTDS
+INFO:root:Matched 52 and 51 together
+INFO:root:Selected 52 for the NTDS
+INFO:root:Selected 51 for the NTDS
+INFO:root:Matched 91 and 5 together
+INFO:root:Selected 91 for the NTDS
+INFO:root:Selected 5 for the NTDS
+INFO:root:Found no match for 79
+INFO:root:Found no match for 77
+INFO:root:Found no match for 81
+INFO:root:Found no match for 85
+INFO:root:Found no match for 56
+INFO:root:Matched 96 and 95 together
+INFO:root:Selected 96 for the NTDS
+INFO:root:Selected 95 for the NTDS
+INFO:root:Found no match for 61
+INFO:root:Matched 72 and 44 together
+INFO:root:Selected 72 for the NTDS
+INFO:root:Selected 44 for the NTDS
+INFO:root:Found no match for 70
+INFO:root:Found no match for 84
