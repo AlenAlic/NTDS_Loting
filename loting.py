@@ -343,7 +343,7 @@ def find_partner(identifier, cursor, city=None):
 
 
 def create_pair(first_dancer, second_dancer, connection, cursor):
-    """Temp"""
+    """Creates a pair of the two selected dancers"""
     query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=signup_list, id=sql_id)
     first_dancer = cursor.execute(query, (first_dancer,)).fetchone()
     second_dancer = cursor.execute(query, (second_dancer,)).fetchone()
