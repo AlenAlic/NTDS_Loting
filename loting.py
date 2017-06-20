@@ -15,6 +15,8 @@ logger.addHandler(logging.StreamHandler())
 
 debug = True
 
+# TODO Combinatie van 3 personen als twee paren implementeren
+
 # init stuff
 participating_teams = 'deelnemende_teams.xlsx'
 template = 'NTDS_Template.xlsx'
@@ -341,7 +343,7 @@ def find_partner(identifier, cursor, city=None):
             logging.info('Matched {id1} and {id2} together'.format(id1=identifier, id2=partner_id))
     return partner_id
 
-
+# TODO Dancer role updaten voor als iemand niet één van de niveau's danst
 def create_pair(first_dancer, second_dancer, connection, cursor):
     """Creates a pair of the two selected dancers"""
     query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=signup_list, id=sql_id)
@@ -642,55 +644,57 @@ def main():
     ####################################################################################################
     # Select beginners if more people have signed than the given cutoff
     ####################################################################################################
-    logging.info('Selecting guaranteed beginners for each team...')
-    create_city_beginners_list(competing_cities, connection=conn, cursor=curs)
-    query = 'SELECT sum({max_beg})-sum({num}) FROM {tn}'\
-        .format(tn=fixed_beginners_list, max_beg=sql_max_con, num=sql_num_con)
-    max_iterations = curs.execute(query).fetchone()[0]
-    for iteration in range(max_iterations):
-        query = 'SELECT * FROM {tn} ORDER BY {num}, RANDOM()'.format(tn=fixed_beginners_list, num=sql_num_con)
-        ordered_cities = curs.execute(query).fetchall()
-        selected_city = None
-        for city in ordered_cities:
-            if selected_city is None:
-                number_of_selected_city_beginners = city[city_dict[sql_num_con]]
-                max_number_of_city_beginners = city[city_dict[sql_max_con]]
-                if (max_number_of_city_beginners - number_of_selected_city_beginners) > 0:
-                    selected_city = city[city_dict[sql_city]]
-        if selected_city is not None:
-            query = 'SELECT * FROM {tn1} WHERE ({ballroom_level} = ? OR {latin_level} = ?) AND {city} = ?' \
-                .format(tn1=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level,
-                        city=sql_city)
-            selected_city_beginners = curs.execute(query, (beginner, beginner, selected_city,)).fetchall()
-            number_of_city_beginners = len(selected_city_beginners)
-            if number_of_city_beginners > 0:
-                random_order = random.sample(range(0, number_of_city_beginners), number_of_city_beginners)
-                partner_id = None
-                for order_city in ordered_cities:
-                    if partner_id is None:
-                        order_city = order_city[city_dict[sql_city]]
-                        if order_city != selected_city:
-                            query = 'SELECT * FROM {tn1} WHERE ({ballroom_level} = ? OR {latin_level} = ?) ' \
-                                    'AND {city} = ?'\
-                                .format(tn1=selection_list, ballroom_level=sql_ballroom_level,
-                                        latin_level=sql_latin_level, city=sql_city)
-                            order_city_beginners = curs.execute(query, (beginner, beginner, order_city,)).fetchall()
-                            number_of_available_beginners = len(order_city_beginners)
-                            if number_of_available_beginners > 0:
-                                for num in random_order:
-                                    if partner_id is None:
-                                        beg = selected_city_beginners[num]
-                                        beginner_id = beg[gen_dict[sql_id]]
-                                        query = ' SELECT * FROM {tn} WHERE {id} = ?'.format(tn=selected_list, id=sql_id)
-                                        beginner_available = curs.execute(query, (beginner_id,)).fetchone()
-                                        if beginner_available is None:
-                                            partner_id = find_partner(beginner_id, cursor=curs)
-                                            if partner_id is not None:
-                                                create_pair(beginner_id, partner_id, connection=conn, cursor=curs)
-                                                move_selected_contestant(beginner_id, connection=conn, cursor=curs)
-                                                move_selected_contestant(partner_id, connection=conn, cursor=curs)
-                                                update_city_beginners(competing_cities, connection=conn, cursor=curs)
-    reset_selection_tables(connection=conn, cursor=curs)
+    if number_of_signed_beginners > beginner_signup_cutoff:
+        logging.info('Selecting guaranteed beginners for each team...')
+        create_city_beginners_list(competing_cities, connection=conn, cursor=curs)
+        query = 'SELECT sum({max_beg})-sum({num}) FROM {tn}'\
+            .format(tn=fixed_beginners_list, max_beg=sql_max_con, num=sql_num_con)
+        max_iterations = curs.execute(query).fetchone()[0]
+        for iteration in range(max_iterations):
+            query = 'SELECT * FROM {tn} ORDER BY {num}, RANDOM()'.format(tn=fixed_beginners_list, num=sql_num_con)
+            ordered_cities = curs.execute(query).fetchall()
+            selected_city = None
+            for city in ordered_cities:
+                if selected_city is None:
+                    number_of_selected_city_beginners = city[city_dict[sql_num_con]]
+                    max_number_of_city_beginners = city[city_dict[sql_max_con]]
+                    if (max_number_of_city_beginners - number_of_selected_city_beginners) > 0:
+                        selected_city = city[city_dict[sql_city]]
+            if selected_city is not None:
+                query = 'SELECT * FROM {tn1} WHERE ({ballroom_level} = ? OR {latin_level} = ?) AND {city} = ?' \
+                    .format(tn1=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level,
+                            city=sql_city)
+                selected_city_beginners = curs.execute(query, (beginner, beginner, selected_city,)).fetchall()
+                number_of_city_beginners = len(selected_city_beginners)
+                if number_of_city_beginners > 0:
+                    random_order = random.sample(range(0, number_of_city_beginners), number_of_city_beginners)
+                    partner_id = None
+                    for order_city in ordered_cities:
+                        if partner_id is None:
+                            order_city = order_city[city_dict[sql_city]]
+                            if order_city != selected_city:
+                                query = 'SELECT * FROM {tn1} WHERE ({ballroom_level} = ? OR {latin_level} = ?) ' \
+                                        'AND {city} = ?'\
+                                    .format(tn1=selection_list, ballroom_level=sql_ballroom_level,
+                                            latin_level=sql_latin_level, city=sql_city)
+                                order_city_beginners = curs.execute(query, (beginner, beginner, order_city,)).fetchall()
+                                number_of_available_beginners = len(order_city_beginners)
+                                if number_of_available_beginners > 0:
+                                    for num in random_order:
+                                        if partner_id is None:
+                                            beg = selected_city_beginners[num]
+                                            beginner_id = beg[gen_dict[sql_id]]
+                                            query = ' SELECT * FROM {tn} WHERE {id} = ?'\
+                                                .format(tn=selected_list, id=sql_id)
+                                            beginner_available = curs.execute(query, (beginner_id,)).fetchone()
+                                            if beginner_available is None:
+                                                partner_id = find_partner(beginner_id, cursor=curs)
+                                                if partner_id is not None:
+                                                    create_pair(beginner_id, partner_id, connection=conn, cursor=curs)
+                                                    move_selected_contestant(beginner_id, connection=conn, cursor=curs)
+                                                    move_selected_contestant(partner_id, connection=conn, cursor=curs)
+                                                    update_city_beginners(competing_cities, connection=conn, cursor=curs)
+        reset_selection_tables(connection=conn, cursor=curs)
 
     ####################################################################################################
     # DEBUG
