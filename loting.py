@@ -703,7 +703,9 @@ def welcome_text():
     help_text.insert(END, 'Selects contestant number "n" (and a potential partner) for the NTDS\n')
     help_text.config(state=DISABLED)
 
-
+db_commands = ['list_fa', 'list_ero', 'list_available', 'list_beginners', 'list_breiten', 'list_open',
+                   'print_contestants',
+                   'finish_selection', 'export']
 def command_help_text():
     """"Temp"""
     status_print('Listing all commands...')
@@ -717,8 +719,12 @@ def command_help_text():
     status_print('Lists all Beginners available for selection')
     status_print('list_breiten:')
     status_print('Lists all dancers with at least one level Breitensport available for selection')
-    status_print('list_beginners:')
+    status_print('list_open:')
     status_print('Lists all dancers with at least one level Open Class available for selection')
+    status_print('print_contestants')
+    status_print('Prints a list of how much contestants each city has had selected')
+    status_print('finish_selection')
+    status_print('Finishes the NTDS selection by adding random contestants')
 
 
 def status_print(status_message):
