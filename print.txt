@@ -5,7 +5,6 @@ import openpyxl
 from random import randint
 import random
 import time
-from tabulate import tabulate
 # import logging
 # logging.basicConfig(filename='loting.log', filemode='w', level=logging.DEBUG)
 # logger = logging.getLogger()
@@ -34,23 +33,14 @@ buffer_for_selection = 40
 
 # Names
 database_name = 'main_data.db'
-selected_database = database_name
 signup_list = 'signup_list'
 selection_list = 'selection_list'
-selected_list = 'selected_list'
+selected_list = 'selected_people'
 team_list = 'team_list'
 partners_list = 'partners_list'
 ref_partner_list = 'reference_partner_list'
 fixed_beginners_list = 'fixed_beginners'
 fixed_lions_list = 'fixed_lions'
-beginners_list = 'beginners'
-lions_list = 'lions'
-contestants_list = 'contestants'
-individual_list = 'individuals'
-sql_run = 'run_number'
-Beginners = 'Beginners'
-Lions = 'Lions'
-contestants = 'contestants'
 
 # more names
 breiten = 'Breiten'
@@ -189,7 +179,6 @@ city_list_query = 'CREATE TABLE {tn} ({city} TEXT, {beg} INT, {max_beg} INT);' \
 def find_partner(identifier, connection, cursor, city=None):
     """Finds the/a partner for a dancer, given id"""
     partner_id = None
-    status_print('Attempting to find a partner for dancer {id}'.format(id=identifier))
     query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_id)
     dancer = cursor.execute(query, (identifier,)).fetchone()
     if dancer is not None:
@@ -391,7 +380,7 @@ def find_partner(identifier, connection, cursor, city=None):
 
 
 def create_pair(first_dancer, second_dancer, connection, cursor):
-    """Creates a pair of the two selected dancers and writes their data away in partner lists"""
+    """Creates a pair of the two selected dancers"""
     query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=signup_list, id=sql_id)
     first_dancer = cursor.execute(query, (first_dancer,)).fetchone()
     second_dancer = cursor.execute(query, (second_dancer,)).fetchone()
@@ -472,36 +461,6 @@ def create_city_beginners_list(cities_list, connection, cursor):
     connection.commit()
 
 
-def select_bulk(limit, connection, cursor):
-    """"Temp"""
-    if limit > max_contestants:
-        limit = max_fixed_lion_contestants
-    query = 'SELECT * FROM {tn}'.format(tn=selection_list)
-    available_dancers = cursor.execute(query).fetchall()
-    number_of_available_dancers = len(available_dancers)
-    if number_of_available_dancers > 0:
-        random_order = random.sample(range(0, number_of_available_dancers), number_of_available_dancers)
-        for num in range(len(random_order)):
-            dancer = available_dancers[random_order[num]]
-            dancer_id = dancer[gen_dict[sql_id]]
-            if dancer_id is not None:
-                query = ' SELECT * FROM {tn} WHERE {id} = ?'.format(tn=selection_list, id=sql_id)
-                dancer_available = cursor.execute(query, (dancer_id,)).fetchone()
-                if dancer_available is not None:
-                    partner_id = find_partner(dancer_id, connection=connection, cursor=cursor)
-                    if partner_id is not None:
-                        create_pair(dancer_id, partner_id, connection=connection, cursor=cursor)
-                        move_selected_contestant(dancer_id, connection=connection, cursor=cursor)
-                        move_selected_contestant(partner_id, connection=connection, cursor=cursor)
-            query = 'SELECT * FROM {tn}'.format(tn=selected_list)
-            remaining_dancers = cursor.execute(query).fetchall()
-            number_of_selected_dancers = len(remaining_dancers)
-            if number_of_selected_dancers >= limit:
-                break
-    connection.commit()
-    reset_selection_tables(connection=connection, cursor=cursor)
-
-
 def update_city_beginners(cities_list, connection, cursor):
     """"Temp"""
     for city in cities_list:
@@ -578,8 +537,8 @@ def max_rc(direction, worksheet):
 def create_tables(connection, cursor):
     """"Drops existing tables and creates new ones"""
     # Drop all existing tables (from previous run)
-    tables_to_drop = [signup_list, selection_list, selected_list, team_list, partners_list, ref_partner_list,
-                      fixed_beginners_list, fixed_lions_list]
+    tables_to_drop = [signup_list, team_list, selection_list, selected_list, partners_list,
+                      fixed_beginners_list, fixed_lions_list, ref_partner_list]
     for item in tables_to_drop:
         query = drop_table_query.format(item)
         cursor.execute(query)
@@ -630,41 +589,7 @@ def reset_selection_tables(connection, cursor):
     connection.commit()
 
 
-def collect_city_overview(source_table, target_table, users, cursor, connection):
-    """"Temp"""
-    if source_table == selected_list:
-        query = 'SELECT {city}, COUNT() FROM {tn} GROUP BY {city}'.format(tn=source_table, city=sql_city)
-    else:
-        query = 'SELECT * FROM {tn} ORDER BY {city}'.format(tn=source_table, city=sql_city)
-    ordered_cities = cursor.execute(query).fetchall()
-    if debug:
-        query = 'CREATE TABLE IF NOT EXISTS {tn} ' \
-                '(id INTEGER PRIMARY KEY AUTOINCREMENT, ' \
-                '{c1} INT, {c2} INT, {c3} INT, {c4} INT, {c5} INT, {c6} INT, {c7} INT, {c8} INT, {c9} INT, ' \
-                '{c10} INT, {c11} INT)' \
-            .format(tn=target_table, c1=ordered_cities[0][0], c2=ordered_cities[1][0], c3=ordered_cities[2][0],
-                    c4=ordered_cities[3][0], c5=ordered_cities[4][0], c6=ordered_cities[5][0], c7=ordered_cities[6][0],
-                    c8=ordered_cities[7][0], c9=ordered_cities[8][0], c10=ordered_cities[9][0],
-                    c11=ordered_cities[10][0])
-        cursor.execute(query)
-        query = 'INSERT INTO {tn} ({c1},{c2},{c3},{c4},{c5},{c6},{c7},{c8},{c9},{c10},{c11}) ' \
-                'VALUES (?,?,?,?,?,?,?,?,?,?,?)' \
-            .format(tn=target_table, c1=ordered_cities[0][0], c2=ordered_cities[1][0], c3=ordered_cities[2][0],
-                    c4=ordered_cities[3][0], c5=ordered_cities[4][0], c6=ordered_cities[5][0], c7=ordered_cities[6][0],
-                    c8=ordered_cities[7][0], c9=ordered_cities[8][0], c10=ordered_cities[9][0],
-                    c11=ordered_cities[10][0])
-        cursor.execute(query, (ordered_cities[0][1], ordered_cities[1][1], ordered_cities[2][1], ordered_cities[3][1],
-                               ordered_cities[4][1], ordered_cities[5][1], ordered_cities[6][1], ordered_cities[7][1],
-                               ordered_cities[8][1], ordered_cities[9][1], ordered_cities[10][1]))
-    for city in ordered_cities:
-        overview = 'Number of selected {users} from {city} is: {number}'\
-            .format(city=city[0], number=city[1], users=users)
-        status_print(overview)
-    status_print('')
-    connection.commit()
-
-
-def print_ntds_config():
+def print_NTDS_config():
     """"Temp"""
     status_print('Contestant numbers for this NTDS selection:')
     status_print('Maximum number of contestants: {num}'.format(num=max_contestants))
@@ -672,39 +597,26 @@ def print_ntds_config():
     status_print('Guaranteed Lion contestants per team: {num}'.format(num=max_fixed_lion_contestants))
     status_print('Cutoff for selecting all beginners: {num}'.format(num=beginner_signup_cutoff))
     status_print('Buffer for selecting contestants at the end: {num}'.format(num=buffer_for_selection))
-    status_print('Levels participating for the Lion:')
-    for level in lion_participants:
-        status_print('\t{lvl}'.format(lvl=level))
+    status_print('')
 
 
 def welcome_text():
-    """"Text displayed when opening the program for the first time."""
+    """"Temp"""
     status_print('Welcome to the NTDS Selection!')
     status_print('')
     status_print('You can start a new selection, update an existing selection, '
                  'or change the options with the buttons in the bottom right corner.')
     status_print('')
-    data_text.config(state=NORMAL)
-    data_text.delete('1.0', END)
-    data_text.insert(END, 'Data about the number of contestants, First Aid Officers, required sleeping locations, etc. '
-                          'will be displayed here once a database has been selected.')
-    data_text.config(state=DISABLED)
     help_text.config(state=NORMAL)
-    help_text.insert(END, 'Some helpful commands are:\n')
-    help_text.insert(END, 'list_available:\n')
-    help_text.insert(END, 'Lists all dancers available for selection\n')
-    help_text.insert(END, 'list_level: {level=beginners/breiten/open}\n')
-    help_text.insert(END, 'Lists all dancers of the given level available for selection\n')
-    help_text.insert(END, 'list_fa:\n')
-    help_text.insert(END, 'Lists all available First Aid Officers\n')
-    help_text.insert(END, 'list_ero:\n')
-    help_text.insert(END, 'Lists all available Emergency Response Officers\n')
-    help_text.insert(END, '-add n:\n')
-    help_text.insert(END, 'Selects contestant number "n" (and a potential partner) for the NTDS\n')
+    help_text.insert(INSERT, 'Some helpful commands are:\n')
+    help_text.insert(INSERT, 'list_all:\n')
+    help_text.insert(INSERT, 'Lists all dancers available for selection\n')
+    help_text.insert(INSERT, '-add n:\n')
+    help_text.insert(INSERT, 'Selects contestant number "n" (and a potential  partner) for the NTDS\n')
     help_text.config(state=DISABLED)
 
 
-def command_help_text():
+def help_text():
     """"Temp"""
     status_print('Listing all commands...')
     status_print('list_fa:')
@@ -713,61 +625,41 @@ def command_help_text():
     status_print('Lists all dancers available for selection that are a qualified Emergency Response Officer')
     status_print('list_available:')
     status_print('Lists all dancers available for selection')
-    status_print('list_beginners:')
-    status_print('Lists all Beginners available for selection')
-    status_print('list_breiten:')
-    status_print('Lists all dancers with at least one level Breitensport available for selection')
-    status_print('list_beginners:')
-    status_print('Lists all dancers with at least one level Open Class available for selection')
 
 
 def status_print(status_message):
     """"Temp"""
     status_text.config(state=NORMAL)
-    status_text.insert(END, status_message)
-    status_text.insert(END, '\n')
+    status_text.insert(INSERT, status_message)
+    status_text.insert(INSERT, '\n')
     status_text.update()
     status_text.see(END)
     status_text.config(state=DISABLED)
 
 
-def print_table(table):
+def make_readable(dancer):
     """"Temp"""
-    formatted_table = []
-    for dancer in table:
-        if dancer[gen_dict[sql_ln_prefix]] == '':
-            name = dancer[gen_dict[sql_first_name]] + ' ' + dancer[gen_dict[sql_last_name]]
-        else:
-            name = dancer[gen_dict[sql_first_name]] + ' ' + dancer[gen_dict[sql_ln_prefix]] + ' ' + \
-                   dancer[gen_dict[sql_last_name]]
-        formatted_dancer = [str(dancer[gen_dict[sql_id]]), name,
-                            dancer[gen_dict[sql_ballroom_level]], dancer[gen_dict[sql_latin_level]],
-                            str(dancer[gen_dict[sql_ballroom_partner]]), str(dancer[gen_dict[sql_latin_partner]]),
-                            dancer[gen_dict[sql_ballroom_role]], dancer[gen_dict[sql_latin_role]],
-                            dancer[gen_dict[sql_ballroom_mandatory_blind_date]],
-                            dancer[gen_dict[sql_latin_mandatory_blind_date]],
-                            dancer[gen_dict[sql_first_aid]], dancer[gen_dict[sql_emergency_response_officer]],
-                            dancer[gen_dict[sql_ballroom_jury]], dancer[gen_dict[sql_latin_jury]],
-                            dancer[gen_dict[sql_student]], dancer[gen_dict[sql_sleeping_location]],
-                            dancer[gen_dict[sql_current_volunteer]], dancer[gen_dict[sql_previous_volunteer]]]
-        formatted_table.append(formatted_dancer)
-    # print_table_header = ['Id', 'Name', 'Ballroom level', 'Latin level', 'Ballroom partner', 'Latin partner',
-    #                       'Ballroom role', 'Latin role', \
-    #                       'Ballroom mandatory blind date', 'Latin mandatory blind date',
-    #                       'First Aid', 'Emergency Response Officer', 'Ballroom jury', 'Latin jury', 'Student',
-    #                       'Sleeping location', 'Volunteer', 'Past volunteer']
-    print_table_header = ['Id', 'Name', 'B-lvl', 'L-lvl', 'B-part', 'L-part',
-                          'B-role', 'L-role', 'B-date', 'L-date',
-                          'F.A.', 'E.R.O.', 'B-jury', 'L-jury', 'Student',
-                          'Sleeping', 'Volunteer', 'Past volunteer']
-    # table_cutoff = 24
-    # while len(formatted_table) > table_cutoff:
-    #     status_print(tabulate(formatted_table[:table_cutoff], headers=print_table_header))
-    #     status_print('')
-    #     formatted_table = formatted_table[table_cutoff:]
-    # status_print(tabulate(formatted_table[:table_cutoff], headers=print_table_header))
-    status_print(tabulate(formatted_table, headers=print_table_header))
-    # status_print('')
+    dancer_string = ''
+    dancer_string += 'Id: ' + str(dancer[gen_dict[sql_id]]) + '\n'
+    dancer_string += 'Name: ' + dancer[gen_dict[sql_first_name]] + ' ' + dancer[gen_dict[sql_ln_prefix]] + ' ' + \
+                     dancer[gen_dict[sql_last_name]] + '\n'
+    dancer_string += 'Ballroom level: ' + dancer[gen_dict[sql_ballroom_level]] + '\n'
+    dancer_string += 'Latin level: ' + dancer[gen_dict[sql_latin_level]] + '\n'
+    dancer_string += 'Ballroom partner: ' + str(dancer[gen_dict[sql_ballroom_partner]]) + '\n'
+    dancer_string += 'Latin partner: ' + str(dancer[gen_dict[sql_latin_partner]]) + '\n'
+    dancer_string += 'Ballroom role: ' + dancer[gen_dict[sql_ballroom_role]] + '\n'
+    dancer_string += 'Latin role: ' + dancer[gen_dict[sql_latin_role]] + '\n'
+    dancer_string += 'Ballroom mandatory blind date: ' + dancer[gen_dict[sql_ballroom_mandatory_blind_date]] + '\n'
+    dancer_string += 'Latin mandatory blind date: ' + dancer[gen_dict[sql_latin_mandatory_blind_date]] + '\n'
+    dancer_string += 'First Aid: ' + dancer[gen_dict[sql_first_aid]] + '\n'
+    dancer_string += 'Emergency Response Officer: ' + dancer[gen_dict[sql_emergency_response_officer]] + '\n'
+    dancer_string += 'Ballroom jury: ' + dancer[gen_dict[sql_ballroom_jury]] + '\n'
+    dancer_string += 'Latin jury: ' + dancer[gen_dict[sql_latin_jury]] + '\n'
+    dancer_string += 'Student: ' + dancer[gen_dict[sql_student]] + '\n'
+    dancer_string += 'Sleeping location: ' + dancer[gen_dict[sql_sleeping_location]] + '\n'
+    dancer_string += 'Volunteer: ' + dancer[gen_dict[sql_current_volunteer]] + '\n'
+    dancer_string += 'Past volunteer: ' + dancer[gen_dict[sql_previous_volunteer]]
+    return dancer_string
 
 
 def status_update(cursor):
@@ -827,44 +719,44 @@ def status_update(cursor):
     number_of_sleeping_spots = len(cursor.execute(query, (NTDS_options['sleeping_location']['yes'],)).fetchall())
     data_text.config(state=NORMAL)
     data_text.delete('1.0', END)
-    data_text.insert(END, 'Total number of contestants: {num}\n'.format(num=number_of_contestants))
-    data_text.insert(END, '\n')
-    data_text.insert(END, 'Beginners Ballroom Leads: {num}\n'.format(num=number_of_beginner_ballroom_leads))
-    data_text.insert(END, 'Beginners Ballroom Follows: {num}\n'.format(num=number_of_beginner_ballroom_follows))
-    data_text.insert(END, 'Beginners Latin Leads: {num}\n'.format(num=number_of_beginner_latin_leads))
-    data_text.insert(END, 'Beginners Latin Follows: {num}\n'.format(num=number_of_beginner_latin_follows))
-    data_text.insert(END, '\n')
-    data_text.insert(END, 'Breitensport Ballroom Leads: {num}\n'.format(num=number_of_breiten_ballroom_leads))
-    data_text.insert(END, 'Breitensport Ballroom Follows: {num}\n'.format(num=number_of_breiten_ballroom_follows))
-    data_text.insert(END, 'Breitensport Latin Leads: {num}\n'.format(num=number_of_breiten_latin_leads))
-    data_text.insert(END, 'Breitensport Latin Follows: {num}\n'.format(num=number_of_breiten_latin_follows))
-    data_text.insert(END, '\n')
-    data_text.insert(END, 'Open Class Ballroom Leads: {num}\n'.format(num=number_of_open_ballroom_leads))
-    data_text.insert(END, 'Open Class Ballroom Follows: {num}\n'.format(num=number_of_open_ballroom_follows))
-    data_text.insert(END, 'Open Class Latin Leads: {num}\n'.format(num=number_of_open_latin_leads))
-    data_text.insert(END, 'Open Class Latin Follows: {num}\n'.format(num=number_of_open_latin_follows))
-    data_text.insert(END, '\n')
-    data_text.insert(END, 'First Aid: {yes} ({maybe})\n'
+    data_text.insert(INSERT, 'Total number of contestants: {num}\n'.format(num=number_of_contestants))
+    data_text.insert(INSERT, '\n')
+    data_text.insert(INSERT, 'Beginners Ballroom Leads: {num}\n'.format(num=number_of_beginner_ballroom_leads))
+    data_text.insert(INSERT, 'Beginners Ballroom Follows: {num}\n'.format(num=number_of_beginner_ballroom_follows))
+    data_text.insert(INSERT, 'Beginners Latin Leads: {num}\n'.format(num=number_of_beginner_latin_leads))
+    data_text.insert(INSERT, 'Beginners Latin Follows: {num}\n'.format(num=number_of_beginner_latin_follows))
+    data_text.insert(INSERT, '\n')
+    data_text.insert(INSERT, 'Breitensport Ballroom Leads: {num}\n'.format(num=number_of_breiten_ballroom_leads))
+    data_text.insert(INSERT, 'Breitensport Ballroom Follows: {num}\n'.format(num=number_of_breiten_ballroom_follows))
+    data_text.insert(INSERT, 'Breitensport Latin Leads: {num}\n'.format(num=number_of_breiten_latin_leads))
+    data_text.insert(INSERT, 'Breitensport Latin Follows: {num}\n'.format(num=number_of_breiten_latin_follows))
+    data_text.insert(INSERT, '\n')
+    data_text.insert(INSERT, 'Open Class Ballroom Leads: {num}\n'.format(num=number_of_open_ballroom_leads))
+    data_text.insert(INSERT, 'Open Class Ballroom Follows: {num}\n'.format(num=number_of_open_ballroom_follows))
+    data_text.insert(INSERT, 'Open Class Latin Leads: {num}\n'.format(num=number_of_open_latin_leads))
+    data_text.insert(INSERT, 'Open Class Latin Follows: {num}\n'.format(num=number_of_open_latin_follows))
+    data_text.insert(INSERT, '\n')
+    data_text.insert(INSERT, 'First Aid: {yes} ({maybe})\n'
                      .format(yes=number_of_first_aid_yes, maybe=number_of_first_aid_maybe))
-    data_text.insert(END, 'Emergency Response Officer: {yes} ({maybe})\n'
+    data_text.insert(INSERT, 'Emergency Response Officer: {yes} ({maybe})\n'
                      .format(yes=number_of_emergency_response_officer_yes,
                              maybe=number_of_emergency_response_officer_maybe))
-    data_text.insert(END, '\n')
-    data_text.insert(END, 'Breitensport mandatory Ballroom blind daters: {num}\n'
+    data_text.insert(INSERT, '\n')
+    data_text.insert(INSERT, 'Breitensport mandatory Ballroom blind daters: {num}\n'
                      .format(num=number_of_mandatory_breiten_ballroom_blind_daters))
-    data_text.insert(END, 'Breitensport mandatory Latin blind daters: {num}\n'
+    data_text.insert(INSERT, 'Breitensport mandatory Latin blind daters: {num}\n'
                      .format(num=number_of_mandatory_breiten_latin_blind_daters))
-    data_text.insert(END, '\n')
-    data_text.insert(END, 'Ballroom juries: {yes} ({maybe})\n'
+    data_text.insert(INSERT, '\n')
+    data_text.insert(INSERT, 'Ballroom juries: {yes} ({maybe})\n'
                      .format(yes=number_of_ballroom_jury_yes, maybe=number_of_ballroom_jury_maybe))
-    data_text.insert(END, 'Latin juries {yes} ({maybe})\n'
+    data_text.insert(INSERT, 'Latin juries {yes} ({maybe})\n'
                      .format(yes=number_of_latin_jury_yes, maybe=number_of_latin_jury_maybe))
-    data_text.insert(END, '\n')
-    data_text.insert(END, 'Volunteers: {yes} ({maybe})\n'
+    data_text.insert(INSERT, '\n')
+    data_text.insert(INSERT, 'Volunteers: {yes} ({maybe})\n'
                      .format(yes=number_of_current_volunteer_yes, maybe=number_of_current_volunteer_maybe))
-    data_text.insert(END, 'Past volunteers: {yes}\n'.format(yes=number_of_past_volunteer))
-    data_text.insert(END, '\n')
-    data_text.insert(END, 'Sleeping spots: {yes}'.format(yes=number_of_sleeping_spots))
+    data_text.insert(INSERT, 'Past volunteers: {yes}\n'.format(yes=number_of_past_volunteer))
+    data_text.insert(INSERT, '\n')
+    data_text.insert(INSERT, 'Sleeping spots: {yes}'.format(yes=number_of_sleeping_spots))
     data_text.see(END)
     data_text.config(state=DISABLED)
 
@@ -874,14 +766,16 @@ def cli_parser(*args):
     wip = 'Work in progress...'
     command = cli_text.get()
     cli_text.delete(0, END)
-    connection = sql.connect(selected_database)
+    connection = sql.connect(database_name)
     cli_curs = connection.cursor()
-    open_commands = ['echo', 'help']
-    db_commands = ['list_fa', 'list_ero', 'list_available', 'list_beginners', 'list_breiten', 'list_open',
-                   'print_contestants',
-                   'finish_selection', 'export']
-    if (command in db_commands or command.startswith('-')) and selected_database != '':
-        if command.startswith('-add '):
+    commands = ['echo', 'help', 'list_fa', 'list_ero', 'list_available',
+                'enum_beginners', 'list_beginners', 'list_available', 'export']
+    if command in commands or command.startswith('-'):
+        if command == 'echo':
+            status_print(command)
+        elif command == 'help':
+            help_text()
+        elif command.startswith('-add '):
             command = command[5:]
             selected_id = int(command)
             partner_id = find_partner(selected_id, connection=connection, cursor=cli_curs)
@@ -889,142 +783,75 @@ def cli_parser(*args):
             move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
             move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
         elif command == 'list_fa':
-            query = 'SELECT * FROM {tn} WHERE {first_aid} = ?'.format(tn=selection_list, first_aid=sql_first_aid)
-            available_contestants = cli_curs.execute(query, (NTDS_options['first_aid']['maybe'],)).fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('Contestants that MIGHT want to volunteer as a First Aid Officer:')
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            available_contestants = cli_curs.execute(query, (NTDS_options['first_aid']['yes'],)).fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('Contestants that want to volunteer as a First Aid Officer:')
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            else:
-                status_print('There are no volunteers available for selection that are a qualified First Aid Officer')
+            query = 'SELECT * FROM {tn} WHERE {first_aid} = ? or {first_aid} = ?'\
+                .format(tn=selection_list, first_aid=sql_first_aid)
+            available_contestants = cli_curs.execute(query, (NTDS_options['first_aid']['yes'], NTDS_options['first_aid']['maybe'])).fetchall()
+            for contestant in available_contestants:
+                contestant = make_readable(contestant)
+                status_print(contestant)
                 status_print('')
         elif command == 'list_ero':
-            query = 'SELECT * FROM {tn} WHERE {ero} = ?'.format(tn=selection_list, ero=sql_emergency_response_officer)
-            available_contestants = cli_curs.execute(query, (NTDS_options['emergency_response_officer']['maybe'],))\
-                .fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('Contestants that MIGHT want to volunteer as a Emergency Response Officer:')
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            available_contestants = cli_curs.execute(query, (NTDS_options['emergency_response_officer']['yes'],)) \
-                .fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('Contestants that want to volunteer as a Emergency Response Officer:')
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            else:
-                status_print('There are no volunteers available for selection that are a qualified '
-                             'Emergency Response Officer')
+            query = 'SELECT * FROM {tn} WHERE {ero} = ? or {ero} = ?'\
+                .format(tn=selection_list, ero=sql_emergency_response_officer)
+            available_contestants = cli_curs.\
+                execute(query, (NTDS_options['emergency_response_officer']['yes'],
+                                NTDS_options['emergency_response_officer']['maybe'])).fetchall()
+            for contestant in available_contestants:
+                contestant = make_readable(contestant)
+                status_print(contestant)
                 status_print('')
         elif command == 'list_available':
             query = 'SELECT * FROM {tn}'.format(tn=selection_list)
             available_contestants = cli_curs.execute(query).fetchall()
-            if len(available_contestants) > 0:
+            for contestant in available_contestants:
+                # contestant = make_readable(contestant)
+                status_print(contestant)
                 status_print('')
-                status_print('All {num} contestants that are available for selection for the NTDS:'
-                             .format(num=len(available_contestants)))
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            else:
-                status_print('There are no contestants available for selection for the NTDS')
-                status_print('')
+        elif command == 'enum_beginners':
+            # query = 'SELECT * FROM {tn} WHERE {bll} = ? AND {blf} = ?' \
+            #     .format(tn=ref_partner_list, bll=sql_ballroom_level_lead, blf=sql_ballroom_level_follow)
+            # beginners_couples = cli_curs.execute(query, (beginner, beginner)).fetchall()
+            # num_beginner_couples = len(beginners_couples)
+            # query = 'SELECT * FROM {tn} WHERE {bll} = ? OR {blf} = ?' \
+            #     .format(tn=ref_partner_list, bll=sql_ballroom_level_lead, blf=sql_ballroom_level_follow)
+            # beginners_singles = cli_curs.execute(query, (beginner, beginner)).fetchall()
+            # num_beginner_singles = len(beginners_singles) - num_beginner_couples
+            # status_print("Number of beginners couples: %.0f" % num_beginner_couples)
+            # status_print("Number of single beginners: %.0f" % num_beginner_singles)
+            status_print(wip)
         elif command == 'list_beginners':
-            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? or {latin_level} = ?'\
-                .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level)
-            available_contestants = cli_curs.execute(query, (beginner, beginner)).fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('All {num} {lvl} dancers that are available for selection for the NTDS:'
-                             .format(num=len(available_contestants), lvl=beginner))
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            else:
-                status_print('There are no {lvl} dancers available for selection for the NTDS'.format(lvl=beginner))
-                status_print('')
-        elif command == 'list_breiten':
-            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? or {latin_level} = ?' \
-                .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level)
-            available_contestants = cli_curs.execute(query, (breiten, breiten)).fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('All {num} {lvl} dancers that are available for selection for the NTDS:'
-                             .format(num=len(available_contestants), lvl=breiten))
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            else:
-                status_print('There are no {lvl} dancers available for selection for the NTDS'.format(lvl=breiten))
-                status_print('')
-        elif command == 'list_open':
-            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? or {latin_level} = ?' \
-                .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level)
-            available_contestants = cli_curs. execute(query, (open_class, open_class)).fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('All {num} {lvl} dancers that are available for selection for the NTDS:'
-                             .format(num=len(available_contestants), lvl=open_class))
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            else:
-                status_print('There are no {lvl} dancers available for selection for the NTDS'.format(lvl=open_class))
-                status_print('')
-        elif command == 'finish_selection':
-            select_bulk(max_contestants, connection=connection, cursor=cli_curs)
-        elif command == 'print_contestants':
-            status_print('')
-            collect_city_overview(source_table=selected_list, target_table=contestants_list, users=contestants,
-                                  cursor=cli_curs, connection=connection)
+            # query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? ORDER BY {id}' \
+            #     .format(tn=selected_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level, id=sql_id)
+            # selected_beginners = cli_curs.execute(query, (beginner, beginner)).fetchall()
+            # for selected_beginner in selected_beginners:
+            #     status_print(selected_beginner)
+            status_print(wip)
         elif command == 'export':
             # otp = selection.replace(".", ("_" + str(time.time()) + "."))
             # wb = openpyxl.Workbook()
             # wb.save(otp)
             status_print(wip)
-    elif command in open_commands:
-        if command == 'echo':
-            status_print(command)
-        elif command == 'help':
-            command_help_text()
     else:
-        if selected_database == '':
-            status_print('Command not available, no open database')
-        else:
-            status_print('Unknown command: "{command}"'.format(command=command))
-    if selected_database != '':
-        status_update(cursor=cli_curs)
+        status_print('Unknown command: "{command}"'.format(command=command))
+    status_update(cursor=cli_curs)
     cli_curs.close()
     connection.close()
 
 
-def main_selection():
-    ####################################################################################################################
+def main():
+    ####################################################################################################
     # Extract data from sign-up sheets
-    ####################################################################################################################
+    ####################################################################################################
     start_time = time.time()
-    timestamp = start_time
     # Connect to database and create a cursor
-    conn = sql.connect(selected_database)
+    conn = sql.connect(database_name)
     curs = conn.cursor()
     # Create SQL tables
     create_tables(connection=conn, cursor=curs)
     # Create competing cities list
     competing_teams = create_competing_teams(connection=conn, cursor=curs)
     competing_cities = [row[team_dict[sql_city]] for row in competing_teams]
+    # number_of_competing_cities = len(competing_cities)
     # Get maximum number of columns
     wb = openpyxl.load_workbook(template)
     ws = wb.worksheets[0]
@@ -1059,9 +886,9 @@ def main_selection():
         total_number_of_contestants += max_row-1
     conn.commit()
 
-    ####################################################################################################################
+    ####################################################################################################
     # Select the team captains and (virtual) partners
-    ####################################################################################################################
+    ####################################################################################################
     status_print('Selecting team captains...')
     query = 'SELECT * FROM {tn1} WHERE {tc} = "Ja"'.format(tn1=selection_list, tc=sql_team_captain)
     team_captains = curs.execute(query).fetchall()
@@ -1080,9 +907,9 @@ def main_selection():
     query = paren_table_query.format(partners_list)
     curs.execute(query)
 
-    ####################################################################################################################
+    ####################################################################################################
     # Select beginners if less people have signed than the given cutoff
-    ####################################################################################################################
+    ####################################################################################################
     query = 'SELECT * FROM {tn1} WHERE {ballroom_level} = ? OR {latin_level} = ?' \
         .format(tn1=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level)
     all_beginners = curs.execute(query, (beginner, beginner)).fetchall()
@@ -1101,9 +928,9 @@ def main_selection():
                 move_selected_contestant(partner_id, connection=conn, cursor=curs)
         conn.commit()
 
-    ####################################################################################################################
+    ####################################################################################################
     # Select beginners if more people have signed than the given cutoff
-    ####################################################################################################################
+    ####################################################################################################
     if number_of_signed_beginners > beginner_signup_cutoff:
         status_print('More than {num} Beginners signed up.'.format(num=beginner_signup_cutoff))
         status_print('Selecting guaranteed beginners for each team...')
@@ -1184,9 +1011,37 @@ def main_selection():
                         update_city_beginners(competing_cities, connection=conn, cursor=curs)
         reset_selection_tables(connection=conn, cursor=curs)
 
-    ####################################################################################################################
+    ####################################################################################################
+    # DEBUG
+    ####################################################################################################
+    if debug:
+        query = 'SELECT * FROM {tn} ORDER BY {city}'.format(tn=fixed_beginners_list, city=sql_city)
+        ordered_cities = curs.execute(query).fetchall()
+        query = 'CREATE TABLE IF NOT EXISTS "beginners" ' \
+                '(id INTEGER PRIMARY KEY AUTOINCREMENT, ' \
+                '{c1} INT, {c2} INT, {c3} INT, {c4} INT, {c5} INT, {c6} INT, {c7} INT, {c8} INT, {c9} INT, ' \
+                '{c10} INT, {c11} INT)' \
+            .format(c1=ordered_cities[0][0], c2=ordered_cities[1][0], c3=ordered_cities[2][0], c4=ordered_cities[3][0],
+                    c5=ordered_cities[4][0], c6=ordered_cities[5][0], c7=ordered_cities[6][0], c8=ordered_cities[7][0],
+                    c9=ordered_cities[8][0], c10=ordered_cities[9][0], c11=ordered_cities[10][0])
+        curs.execute(query)
+        query = 'INSERT INTO "beginners" ({c1},{c2},{c3},{c4},{c5},{c6},{c7},{c8},{c9},{c10},{c11}) ' \
+                'VALUES (?,?,?,?,?,?,?,?,?,?,?)' \
+            .format(c1=ordered_cities[0][0], c2=ordered_cities[1][0], c3=ordered_cities[2][0], c4=ordered_cities[3][0],
+                    c5=ordered_cities[4][0], c6=ordered_cities[5][0], c7=ordered_cities[6][0], c8=ordered_cities[7][0],
+                    c9=ordered_cities[8][0], c10=ordered_cities[9][0], c11=ordered_cities[10][0])
+        curs.execute(query, (ordered_cities[0][1], ordered_cities[1][1], ordered_cities[2][1], ordered_cities[3][1],
+                             ordered_cities[4][1], ordered_cities[5][1], ordered_cities[6][1], ordered_cities[7][1],
+                             ordered_cities[8][1], ordered_cities[9][1], ordered_cities[10][1]))
+        for city in ordered_cities:
+            overview = 'Number of selected beginners from {city} is: {number}'.format(city=city[0], number=city[1])
+            status_print(overview)
+        conn.commit()
+
+    # Bug where sometimes less lions than guaranteed are selected
+    ####################################################################################################
     # Select guaranteed lions contestants
-    ####################################################################################################################
+    ####################################################################################################
     status_print('Selecting guaranteed lions for each team...')
     create_city_lions_list(competing_cities, connection=conn, cursor=curs)
     query = 'SELECT sum({max_lion})-sum({num}) FROM {tn}' \
@@ -1234,10 +1089,38 @@ def main_selection():
                                                 update_city_lions(competing_cities, connection=conn, cursor=curs)
     reset_selection_tables(connection=conn, cursor=curs)
 
-    ####################################################################################################################
+    ####################################################################################################
+    # DEBUG
+    ####################################################################################################
+    if debug:
+        query = 'SELECT * FROM {tn} ORDER BY {city}'.format(tn=fixed_lions_list, city=sql_city)
+        ordered_cities = curs.execute(query).fetchall()
+        query = 'CREATE TABLE IF NOT EXISTS "lions" ' \
+                '(id INTEGER PRIMARY KEY AUTOINCREMENT, ' \
+                '{c1} INT, {c2} INT, {c3} INT, {c4} INT, {c5} INT, {c6} INT, {c7} INT, {c8} INT, {c9} INT, ' \
+                '{c10} INT, {c11} INT)'\
+            .format(c1=ordered_cities[0][0], c2=ordered_cities[1][0], c3=ordered_cities[2][0], c4=ordered_cities[3][0],
+                    c5=ordered_cities[4][0], c6=ordered_cities[5][0], c7=ordered_cities[6][0], c8=ordered_cities[7][0],
+                    c9=ordered_cities[8][0], c10=ordered_cities[9][0], c11=ordered_cities[10][0])
+        curs.execute(query)
+        query = 'INSERT INTO "lions" ({c1},{c2},{c3},{c4},{c5},{c6},{c7},{c8},{c9},{c10},{c11}) ' \
+                'VALUES (?,?,?,?,?,?,?,?,?,?,?)' \
+            .format(c1=ordered_cities[0][0], c2=ordered_cities[1][0], c3=ordered_cities[2][0], c4=ordered_cities[3][0],
+                    c5=ordered_cities[4][0], c6=ordered_cities[5][0], c7=ordered_cities[6][0], c8=ordered_cities[7][0],
+                    c9=ordered_cities[8][0], c10=ordered_cities[9][0], c11=ordered_cities[10][0])
+        curs.execute(query, (ordered_cities[0][1], ordered_cities[1][1], ordered_cities[2][1], ordered_cities[3][1],
+                             ordered_cities[4][1], ordered_cities[5][1], ordered_cities[6][1], ordered_cities[7][1],
+                             ordered_cities[8][1], ordered_cities[9][1], ordered_cities[10][1]))
+        for city in ordered_cities:
+            overview = 'Number of selected lions from {city} is: {number}'.format(city=city[0], number=city[1])
+            status_print(overview)
+        conn.commit()
+
+    ####################################################################################################
     # Select remaining contestants
-    ####################################################################################################################
+    ####################################################################################################
     status_print('Selecting the bulk of contestants that have signed up...')
+    # query = 'SELECT * FROM {tn} ORDER BY RANDOM()'.format(tn=selection_list)
     query = 'SELECT * FROM {tn}'.format(tn=selection_list)
     available_dancers = curs.execute(query).fetchall()
     number_of_available_dancers = len(available_dancers)
@@ -1256,59 +1139,62 @@ def main_selection():
                         move_selected_contestant(dancer_id, connection=conn, cursor=curs)
                         move_selected_contestant(partner_id, connection=conn, cursor=curs)
             query = 'SELECT * FROM {tn}'.format(tn=selected_list)
-            remaining_dancers = curs.execute(query).fetchall()
-            number_of_selected_dancers = len(remaining_dancers) + buffer_for_selection
+            all_dancers = curs.execute(query).fetchall()
+            number_of_selected_dancers = len(all_dancers) + buffer_for_selection
             if number_of_selected_dancers >= max_contestants:
                 break
     conn.commit()
     reset_selection_tables(connection=conn, cursor=curs)
-    status_print('')
     status_print("--- Done in %.3f seconds ---" % (time.time() - start_time))
-    status_print('')
 
-    ####################################################################################################################
-    # Create signup excel file
-    ####################################################################################################################
-    # otp = selection.replace(".", ("_"+str(start_time)+"."))
-    # wb = openpyxl.Workbook()
-    # wb.save(otp)
-    # if exists(selection):
-    #     wb = openpyxl.load_workbook(selection)
-    # query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=selected_list, id=sql_id)
-    # selected_contestants = curs.execute(query).fetchall()
+    ####################################################################################################
+    # DEBUG
+    ####################################################################################################
+    if debug:
+        query = 'SELECT {city}, COUNT() FROM {tn} GROUP BY {city}'.format(tn=selected_list, city=sql_city)
+        ordered_cities = curs.execute(query).fetchall()
+        query = 'CREATE TABLE IF NOT EXISTS "contestants" ' \
+                '(id INTEGER PRIMARY KEY AUTOINCREMENT, ' \
+                '{c1} INT, {c2} INT, {c3} INT, {c4} INT, {c5} INT, {c6} INT, {c7} INT, {c8} INT, {c9} INT, ' \
+                '{c10} INT, {c11} INT)' \
+            .format(c1=ordered_cities[0][0], c2=ordered_cities[1][0], c3=ordered_cities[2][0], c4=ordered_cities[3][0],
+                    c5=ordered_cities[4][0], c6=ordered_cities[5][0], c7=ordered_cities[6][0], c8=ordered_cities[7][0],
+                    c9=ordered_cities[8][0], c10=ordered_cities[9][0], c11=ordered_cities[10][0])
+        curs.execute(query)
+        query = 'INSERT INTO "contestants" ({c1},{c2},{c3},{c4},{c5},{c6},{c7},{c8},{c9},{c10},{c11}) ' \
+                'VALUES (?,?,?,?,?,?,?,?,?,?,?)' \
+            .format(c1=ordered_cities[0][0], c2=ordered_cities[1][0], c3=ordered_cities[2][0], c4=ordered_cities[3][0],
+                    c5=ordered_cities[4][0], c6=ordered_cities[5][0], c7=ordered_cities[6][0], c8=ordered_cities[7][0],
+                    c9=ordered_cities[8][0], c10=ordered_cities[9][0], c11=ordered_cities[10][0])
+        curs.execute(query, (ordered_cities[0][1], ordered_cities[1][1], ordered_cities[2][1], ordered_cities[3][1],
+                             ordered_cities[4][1], ordered_cities[5][1], ordered_cities[6][1], ordered_cities[7][1],
+                             ordered_cities[8][1], ordered_cities[9][1], ordered_cities[10][1]))
+        for city in ordered_cities:
+            overview = 'Number of selected contestants from {city} is: {number}'.format(city=city[0], number=city[1])
+            status_print(overview)
+        conn.commit()
 
-    ####################################################################################################################
-    # Collect user data from main selection
-    ####################################################################################################################
-    collect_city_overview(source_table=fixed_beginners_list, target_table=beginners_list, users=Beginners,
-                          cursor=curs, connection=conn)
-    collect_city_overview(source_table=fixed_lions_list, target_table=lions_list, users=Lions,
-                          cursor=curs, connection=conn)
-    collect_city_overview(source_table=selected_list, target_table=contestants_list, users=contestants,
-                          cursor=curs, connection=conn)
-
-    ####################################################################################################################
-    # Collect individual data for statistical analysis
-    ####################################################################################################################
+    ####################################################################################################
+    # DEBUG
+    ####################################################################################################
     if debug:
         query = 'SELECT * FROM {tn}'.format(tn=signup_list)
         all_dancers = curs.execute(query).fetchall()
-        query = 'SELECT name FROM sqlite_master WHERE type = "table" AND name = "{tn}"'.format(tn=individual_list)
+        query = 'SELECT name FROM sqlite_master WHERE type="table" AND name="individual"'
         individual_table_exists = len(curs.execute(query).fetchall())
         if individual_table_exists == 0:
-            query = 'CREATE TABLE IF NOT EXISTS {tn} ({run} INTEGER PRIMARY KEY, '\
-                .format(tn=individual_list, run=sql_run)
+            query = 'CREATE TABLE IF NOT EXISTS "individual" ("run" INTEGER PRIMARY KEY, '
             for dancer in all_dancers:
                 dancer_id = dancer[gen_dict[sql_id]]
-                query += ('"' + str(dancer_id) + '" INT, ')
+                query += ('"'+str(dancer_id)+'" INT, ')
             query = query[:-2]
             query += ')'
             curs.execute(query)
-        query = 'SELECT {run} FROM {tn}'.format(tn=individual_list, run=sql_run)
+        query = 'SELECT "run" FROM "individual"'
         last_run = len(curs.execute(query).fetchall())
         this_run = last_run + 1
-        query = 'INSERT INTO {tn} ({run}) VALUES (?)'.format(tn=individual_list, run=sql_run)
-        curs.execute(query, (this_run,))
+        query = 'INSERT INTO "individual" ("run") VALUES ({run})'.format(run=this_run)
+        curs.execute(query)
         for dancer in all_dancers:
             dancer_id = dancer[gen_dict[sql_id]]
             query = 'SELECT * FROM {tn} WHERE {id} = ?'.format(id=sql_id, tn=selected_list)
@@ -1317,9 +1203,20 @@ def main_selection():
                 dancer_selected = 0
             else:
                 dancer_selected = 1
-            query = 'UPDATE {tn} SET "{col}" = ? WHERE {run} = ?'.format(tn=individual_list, run=sql_run, col=dancer_id)
+            query = 'UPDATE "individual" SET "{col}" = ? WHERE "run" = ?'.format(col=dancer_id)
             curs.execute(query, (dancer_selected, this_run))
         conn.commit()
+
+    ####################################################################################################
+    # Create signup excel file
+    ####################################################################################################
+    # otp = selection.replace(".", ("_"+str(start_time)+"."))
+    # wb = openpyxl.Workbook()
+    # wb.save(otp)
+    # if exists(selection):
+    #     wb = openpyxl.load_workbook(selection)
+    # query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=selected_list, id=sql_id)
+    # selected_contestants = curs.execute(query).fetchall()
 
     # Update status
     status_update(cursor=curs)
@@ -1330,43 +1227,25 @@ def main_selection():
 
 if __name__ == "__main__":
     root = Tk()
-    root.geometry("1820x900")
-    root.state('zoomed')
-    # root.option_add("*Font", tkFont.nametofont('TkFixedFont'))
-    pad_out = 8
+    # root.geometry("1600x900")
+    pad_out = 14
     pad_in = 8
-    frame = Frame()
-    frame.place(in_=root, anchor="c", relx=.50, rely=.50)
-    xscrollbar = Scrollbar(master=frame, orient=HORIZONTAL)
-    xscrollbar.grid(row=2, column=0, padx=pad_in, sticky=E+W)
-    status_text = Text(master=frame, width=148, height=50, padx=pad_in, pady=pad_in,
-                       xscrollcommand=True, yscrollcommand=True, state=DISABLED, wrap=NONE)
-    status_text.grid(row=0, column=0, padx=pad_out, rowspan=2)
-    xscrollbar.config(command=status_text.xview)
-    cli_text = Entry(master=frame, width=200)
-    cli_text.grid(row=3, column=0, padx=pad_in, pady=pad_out)
+    status_text = Text(master=root, width=136, height=50, padx=pad_in, pady=pad_in, yscrollcommand=True, state=DISABLED)
+    status_text.grid(row=0, column=0, padx=pad_out, pady=pad_out, rowspan=2)
+    cli_text = Entry(master=root, width=184)
+    cli_text.grid(row=2, column=0)
     cli_text.bind('<Return> ', cli_parser)
-    data_help_frame = Frame(master=frame)
-    data_help_frame.grid(row=0, column=1, rowspan=4, columnspan=3)
-    data_text = Text(master=data_help_frame, width=70, height=30, padx=pad_in, pady=pad_in, wrap=WORD, state=DISABLED)
-    data_text.grid(row=0, column=0, padx=pad_out, columnspan=3)
-    padding_frame = Frame(master=data_help_frame, height=16)
-    padding_frame.grid(row=1, column=0)
-    help_text = Text(master=data_help_frame, width=70, height=19, padx=pad_in, pady=pad_in, wrap=WORD, state=DISABLED)
-    help_text.grid(row=2, column=0, padx=pad_out, columnspan=3)
-    start_button = Button(master=data_help_frame, text='Start new selection database', command=main_selection)
-    start_button.grid(row=3, column=0, padx=pad_out, pady=pad_in)
-    update_button = Button(master=data_help_frame, text='Select existing database')
-    update_button.grid(row=3, column=1, padx=pad_out)
-    options_button = Button(master=data_help_frame, text='Options')
-    options_button.grid(row=3, column=2, padx=pad_out)
+    data_text = Text(master=root, width=48, height=30, padx=pad_in, pady=pad_in, state=DISABLED)
+    data_text.grid(row=0, column=1, padx=pad_out, pady=pad_out, columnspan=5)
+    help_text = Text(master=root, width=48, height=17, padx=pad_in, pady=pad_in, state=DISABLED)
+    help_text.grid(row=1, column=1, padx=pad_out, pady=pad_out, columnspan=5)
+    start_button = Button(master=root, text='Start new selection', command=main)
+    start_button.grid(row=2, column=1, padx=pad_out, pady=pad_in)
+    update_button = Button(master=root, text='Update selection')
+    update_button.grid(row=2, column=2, padx=pad_out)
+    options_button = Button(master=root, text='Options')
+    options_button.grid(row=2, column=4, padx=pad_out)
     welcome_text()
-    print_ntds_config()
-    cli_text.focus_set()
-    if selected_database != '':
-        main_conn = sql.connect(selected_database)
-        main_curs = main_conn.cursor()
-        status_update(cursor=main_curs)
-        main_curs.close()
-        main_conn.close()
+    print_NTDS_config()
     root.mainloop()
+    # main()
