@@ -12,8 +12,11 @@ from tabulate import tabulate
 # logger.setLevel(logging.DEBUG)
 # logger.addHandler(logging.StreamHandler())
 from tkinter import *
+from tkinter import messagebox
+from classes.Mbox import Mbox
+import os.path
 
-debug = True
+debug = False
 
 # TODO CLI
 # TODO controle programma voor inschrijflijst
@@ -34,7 +37,7 @@ buffer_for_selection = 40
 
 # Names
 database_name = 'main_data.db'
-selected_database = database_name
+database_key = {'db': ''}
 signup_list = 'signup_list'
 selection_list = 'selection_list'
 selected_list = 'selected_list'
@@ -186,7 +189,7 @@ city_list_query = 'CREATE TABLE {tn} ({city} TEXT, {beg} INT, {max_beg} INT);' \
     .format(tn={}, city=sql_city, beg=sql_num_con, max_beg=sql_max_con)
 
 
-def find_partner(identifier, connection, cursor, city=None):
+def find_partner(identifier, connection, cursor, city=None, signed_partner_only=False):
     """Finds the/a partner for a dancer, given id"""
     partner_id = None
     status_print('Attempting to find a partner for dancer {id}'.format(id=identifier))
@@ -236,147 +239,154 @@ def find_partner(identifier, connection, cursor, city=None):
             partner_id = latin_partner
         if partner_id is not None:
             status_print('{id1} and {id2} signed up together'.format(id1=identifier, id2=partner_id))
-        query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? AND {ballroom_partner} = "" ' \
-                'AND {latin_partner} = "" ' \
-            .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level,
-                    ballroom_partner=sql_ballroom_partner, latin_partner=sql_latin_partner)
-        if ballroom_role != '' and ballroom_role == latin_role:
-            query += 'AND {ballroom_role} != ? AND latin_role != ? '\
-                .format(ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
-        elif ballroom_role != '' and latin_role == '':
-            query += 'AND {ballroom_role} != ? AND latin_role = ? ' \
-                .format(ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
-        elif ballroom_role == '' and latin_role != '':
-            query += 'AND {ballroom_role} = ? AND latin_role != ? ' \
-                .format(ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
-        elif ballroom_role == '' and latin_role == '':
-            query += 'AND {ballroom_role} = ? AND latin_role = ? ' \
-                .format(ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
-        else:
-            query += 'AND {ballroom_role} = ? AND latin_role != ? ' \
-                .format(ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
-            query2 = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? AND ' \
-                     '{ballroom_partner} = "" AND {latin_partner} = "" ' \
-                     'AND {ballroom_role} = ? AND latin_role = ? '\
+        if partner_id is None:
+            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? AND {ballroom_partner} = "" ' \
+                    'AND {latin_partner} = "" ' \
+                .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level,
+                        ballroom_partner=sql_ballroom_partner, latin_partner=sql_latin_partner)
+            if ballroom_role != '' and ballroom_role == latin_role:
+                query += 'AND {ballroom_role} != ? AND latin_role != ? '\
+                    .format(ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
+            elif ballroom_role != '' and latin_role == '':
+                query += 'AND {ballroom_role} != ? AND latin_role = ? ' \
+                    .format(ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
+            elif ballroom_role == '' and latin_role != '':
+                query += 'AND {ballroom_role} = ? AND latin_role != ? ' \
+                    .format(ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
+            elif ballroom_role == '' and latin_role == '':
+                query += 'AND {ballroom_role} = ? AND latin_role = ? ' \
+                    .format(ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
+            else:
+                query += 'AND {ballroom_role} = ? AND latin_role != ? ' \
+                    .format(ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
+                query2 = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? AND ' \
+                         '{ballroom_partner} = "" AND {latin_partner} = "" ' \
+                         'AND {ballroom_role} = ? AND latin_role = ? '\
+                    .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level,
+                            ballroom_partner=sql_ballroom_partner, latin_partner=sql_latin_partner,
+                            ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
+                if city is None:
+                    query2 += ' AND {team} != ?'.format(team=sql_city)
+                else:
+                    query2 += ' AND {team} = ?'.format(team=sql_city)
+                    team = city
+                potential_partners = cursor.execute(query2, (ballroom_level, '', ballroom_role, '', team)).fetchall()
+                number_of_potential_partners = len(potential_partners)
+                if number_of_potential_partners > 0:
+                    random_num = randint(0, number_of_potential_partners - 1)
+                    first_partner_id = potential_partners[random_num][gen_dict[sql_id]]
+                    if first_partner_id is not None:
+                        status_print('Different roles: {id1} and {id2} matched together'
+                                     .format(id1=identifier, id2=first_partner_id))
+                        create_pair(identifier, first_partner_id, connection=connection, cursor=cursor)
+                        move_selected_contestant(first_partner_id, connection=connection, cursor=cursor)
+                ballroom_level = ''
+                ballroom_role = ''
+            if city is None:
+                query += ' AND {team} != ?'.format(team=sql_city)
+            else:
+                query += ' AND {team} = ?'.format(team=sql_city)
+                team = city
+        # Try to find an "ideal" partner with the same combination of levels for the dancer
+        potential_partners = []
+        number_of_potential_partners = len(potential_partners)
+        if signed_partner_only is False:
+            if partner_id is None:
+                potential_partners = cursor.\
+                    execute(query, (ballroom_level, latin_level, ballroom_role, latin_role, team))\
+                    .fetchall()
+                number_of_potential_partners = len(potential_partners)
+                if number_of_potential_partners > 0:
+                    random_num = randint(0, number_of_potential_partners - 1)
+                    partner_id = potential_partners[random_num][gen_dict[sql_id]]
+            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? AND {ballroom_partner} = "" ' \
+                    'AND {latin_partner} = "" AND {ballroom_role} != ? AND latin_role != ? '\
                 .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level,
                         ballroom_partner=sql_ballroom_partner, latin_partner=sql_latin_partner,
                         ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
             if city is None:
-                query2 += ' AND {team} != ?'.format(team=sql_city)
+                query += ' AND {team} != ?'.format(team=sql_city)
             else:
-                query2 += ' AND {team} = ?'.format(team=sql_city)
+                query += ' AND {team} = ?'.format(team=sql_city)
                 team = city
-            potential_partners = cursor.execute(query2, (ballroom_level, '', ballroom_role, '', team)).fetchall()
-            number_of_potential_partners = len(potential_partners)
-            if number_of_potential_partners > 0:
-                random_num = randint(0, number_of_potential_partners - 1)
-                first_partner_id = potential_partners[random_num][gen_dict[sql_id]]
-                if first_partner_id is not None:
-                    status_print('Different roles: {id1} and {id2} matched together'
-                                 .format(id1=identifier, id2=first_partner_id))
-                    create_pair(identifier, first_partner_id, connection=connection, cursor=cursor)
-                    move_selected_contestant(first_partner_id, connection=connection, cursor=cursor)
-            ballroom_level = ''
-            ballroom_role = ''
-        if city is None:
-            query += ' AND {team} != ?'.format(team=sql_city)
-        else:
-            query += ' AND {team} = ?'.format(team=sql_city)
-            team = city
-        # Try to find an "ideal" partner with the same combination of levels for the dancer
-        potential_partners = []
-        number_of_potential_partners = len(potential_partners)
-        if partner_id is None:
-            potential_partners = cursor.execute(query, (ballroom_level, latin_level, ballroom_role, latin_role, team))\
-                .fetchall()
-            number_of_potential_partners = len(potential_partners)
-            if number_of_potential_partners > 0:
-                random_num = randint(0, number_of_potential_partners - 1)
-                partner_id = potential_partners[random_num][gen_dict[sql_id]]
-        query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? AND {ballroom_partner} = "" AND ' \
-                '{latin_partner} = "" AND {ballroom_role} != ? AND latin_role != ? '\
-            .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level,
-                    ballroom_partner=sql_ballroom_partner, latin_partner=sql_latin_partner,
-                    ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
-        if city is None:
-            query += ' AND {team} != ?'.format(team=sql_city)
-        else:
-            query += ' AND {team} = ?'.format(team=sql_city)
-            team = city
-        # Try to find a partner for a beginner, beginner combination
-        if all([ballroom_level == beginner, latin_level == beginner,
-                partner_id is None, number_of_potential_partners == 0]):
-            potential_partners += cursor.execute(query, (beginner, '', ballroom_role, '', team)).fetchall()
-            potential_partners += cursor.execute(query, ('', beginner, '', latin_role, team)).fetchall()
-        # Try to find a partner for a beginner, Null combination
-        if all([ballroom_level == beginner, latin_level == '',
-                number_of_potential_partners == 0, partner_id is None]):
-            potential_partners += cursor.execute(query, (beginner, beginner, ballroom_role, ballroom_role, team))\
-                .fetchall()
-        # Try to find a partner for a Null, beginner combination
-        if all([ballroom_level == '', latin_level == beginner,
-                number_of_potential_partners == 0, partner_id is None]):
-            potential_partners += cursor.execute(query, (beginner, beginner, latin_role, latin_role, team))\
-                .fetchall()
-        # Try to find a partner for a breiten, breiten combination
-        if all([ballroom_level == breiten, latin_level == breiten,
-                number_of_potential_partners == 0, partner_id is None]):
-            potential_partners += cursor.execute(query, (breiten, '', ballroom_role, '', team)).fetchall()
-            potential_partners += cursor.execute(query, ('', breiten, '', latin_role, team)).fetchall()
-            potential_partners += cursor.execute(query, (breiten, open_class, ballroom_role, latin_role, team))\
-                .fetchall()
-            potential_partners += cursor.execute(query, (open_class, breiten, ballroom_role, latin_role, team))\
-                .fetchall()
-        # Try to find a partner for a breiten, Null combination
-        if all([ballroom_level == breiten, latin_level == '',
-                number_of_potential_partners == 0, partner_id is None]):
-            potential_partners += cursor.execute(query, (breiten, breiten, ballroom_role, ballroom_role, team))\
-                .fetchall()
-            potential_partners += cursor.execute(query, (breiten, open_class, ballroom_role, ballroom_role, team))\
-                .fetchall()
-        # Try to find a partner for a Null, breiten combination
-        if all([ballroom_level == '', latin_level == breiten,
-                number_of_potential_partners == 0, partner_id is None]):
-            potential_partners += cursor.execute(query, (breiten, breiten, latin_role, latin_role, team)).fetchall()
-            potential_partners += cursor.execute(query, (open_class, breiten, latin_role, latin_role, team)).fetchall()
-        # Try to find a partner for a breiten, Open combination
-        if all([ballroom_level == breiten, latin_level == open_class,
-                number_of_potential_partners == 0, partner_id is None]):
-            potential_partners += cursor.execute(query, (breiten, breiten, ballroom_role, latin_role, team)).fetchall()
-            potential_partners += cursor.execute(query, (breiten, '', ballroom_role, '', team)).fetchall()
-            potential_partners += cursor.execute(query, (open_class, open_class, ballroom_role, latin_role, team))\
-                .fetchall()
-            potential_partners += cursor.execute(query, ('', open_class, '', latin_role, team)).fetchall()
-        # Try to find a partner for a Open, Breiten combination
-        if all([ballroom_level == open_class, latin_level == breiten,
-                number_of_potential_partners == 0, partner_id is None]):
-            potential_partners += cursor.execute(query, (breiten, breiten, ballroom_role, latin_role, team)).fetchall()
-            potential_partners += cursor.execute(query, ('', breiten, '', latin_role, team)).fetchall()
-            potential_partners += cursor.execute(query, (open_class, open_class, ballroom_role, latin_role, team))\
-                .fetchall()
-            potential_partners += cursor.execute(query, (open_class, '', ballroom_role, '', team)).fetchall()
-        # Try to find a partner for a Open, Open combination
-        if all([ballroom_level == open_class, latin_level == open_class,
-                number_of_potential_partners == 0, partner_id is None]):
-            potential_partners += cursor.execute(query, (breiten, open_class, ballroom_role, latin_role, team))\
-                .fetchall()
-            potential_partners += cursor.execute(query, (open_class, breiten, ballroom_role, latin_role, team))\
-                .fetchall()
-            potential_partners += cursor.execute(query, (open_class, '', ballroom_role, '', team)).fetchall()
-            potential_partners += cursor.execute(query, ('', open_class, '', latin_role, team)).fetchall()
-        # Try to find a partner for a Open, Null combination
-        if all([ballroom_level == open_class, latin_level == '',
-                number_of_potential_partners == 0, partner_id is None]):
-            potential_partners += cursor.execute(query, (open_class, breiten, ballroom_role, ballroom_role, team))\
-                .fetchall()
-            potential_partners += cursor.execute(query, (open_class, open_class, ballroom_role, ballroom_role, team))\
-                .fetchall()
-        # Try to find a partner for a Null, Open combination
-        if all([ballroom_level == '', latin_level == open_class,
-                number_of_potential_partners == 0, partner_id is None]):
-            potential_partners += cursor.execute(query, (breiten, open_class, latin_role, latin_role, team)).fetchall()
-            potential_partners += cursor.execute(query, (open_class, open_class, latin_role, latin_role, team))\
-                .fetchall()
+            # Try to find a partner for a beginner, beginner combination
+            if all([ballroom_level == beginner, latin_level == beginner,
+                    partner_id is None, number_of_potential_partners == 0]):
+                potential_partners += cursor.execute(query, (beginner, '', ballroom_role, '', team)).fetchall()
+                potential_partners += cursor.execute(query, ('', beginner, '', latin_role, team)).fetchall()
+            # Try to find a partner for a beginner, Null combination
+            if all([ballroom_level == beginner, latin_level == '',
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (beginner, beginner, ballroom_role, ballroom_role, team))\
+                    .fetchall()
+            # Try to find a partner for a Null, beginner combination
+            if all([ballroom_level == '', latin_level == beginner,
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (beginner, beginner, latin_role, latin_role, team))\
+                    .fetchall()
+            # Try to find a partner for a breiten, breiten combination
+            if all([ballroom_level == breiten, latin_level == breiten,
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (breiten, '', ballroom_role, '', team)).fetchall()
+                potential_partners += cursor.execute(query, ('', breiten, '', latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (breiten, open_class, ballroom_role, latin_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, (open_class, breiten, ballroom_role, latin_role, team))\
+                    .fetchall()
+            # Try to find a partner for a breiten, Null combination
+            if all([ballroom_level == breiten, latin_level == '',
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (breiten, breiten, ballroom_role, ballroom_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, (breiten, open_class, ballroom_role, ballroom_role, team))\
+                    .fetchall()
+            # Try to find a partner for a Null, breiten combination
+            if all([ballroom_level == '', latin_level == breiten,
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (breiten, breiten, latin_role, latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (open_class, breiten, latin_role, latin_role, team))\
+                    .fetchall()
+            # Try to find a partner for a breiten, Open combination
+            if all([ballroom_level == breiten, latin_level == open_class,
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (breiten, breiten, ballroom_role, latin_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, (breiten, '', ballroom_role, '', team)).fetchall()
+                potential_partners += cursor.execute(query, (open_class, open_class, ballroom_role, latin_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, ('', open_class, '', latin_role, team)).fetchall()
+            # Try to find a partner for a Open, Breiten combination
+            if all([ballroom_level == open_class, latin_level == breiten,
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (breiten, breiten, ballroom_role, latin_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, ('', breiten, '', latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (open_class, open_class, ballroom_role, latin_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, (open_class, '', ballroom_role, '', team)).fetchall()
+            # Try to find a partner for a Open, Open combination
+            if all([ballroom_level == open_class, latin_level == open_class,
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (breiten, open_class, ballroom_role, latin_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, (open_class, breiten, ballroom_role, latin_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, (open_class, '', ballroom_role, '', team)).fetchall()
+                potential_partners += cursor.execute(query, ('', open_class, '', latin_role, team)).fetchall()
+            # Try to find a partner for a Open, Null combination
+            if all([ballroom_level == open_class, latin_level == '',
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (open_class, breiten, ballroom_role, ballroom_role, team))\
+                    .fetchall()
+                potential_partners += cursor\
+                    .execute(query, (open_class, open_class, ballroom_role, ballroom_role, team)).fetchall()
+            # Try to find a partner for a Null, Open combination
+            if all([ballroom_level == '', latin_level == open_class,
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor\
+                    .execute(query, (breiten, open_class, latin_role, latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (open_class, open_class, latin_role, latin_role, team))\
+                    .fetchall()
         # If there is a potential partner, randomly select one
         if partner_id is None:
             number_of_potential_partners = len(potential_partners)
@@ -472,7 +482,7 @@ def create_city_beginners_list(cities_list, connection, cursor):
     connection.commit()
 
 
-def select_bulk(limit, connection, cursor):
+def select_bulk(limit, connection, cursor, no_partner=False):
     """"Temp"""
     if limit > max_contestants:
         limit = max_fixed_lion_contestants
@@ -489,13 +499,12 @@ def select_bulk(limit, connection, cursor):
                 dancer_available = cursor.execute(query, (dancer_id,)).fetchone()
                 if dancer_available is not None:
                     partner_id = find_partner(dancer_id, connection=connection, cursor=cursor)
-                    if partner_id is not None:
+                    if (partner_id is not None and no_partner is False) or no_partner is True:
                         create_pair(dancer_id, partner_id, connection=connection, cursor=cursor)
                         move_selected_contestant(dancer_id, connection=connection, cursor=cursor)
                         move_selected_contestant(partner_id, connection=connection, cursor=cursor)
             query = 'SELECT * FROM {tn}'.format(tn=selected_list)
-            remaining_dancers = cursor.execute(query).fetchall()
-            number_of_selected_dancers = len(remaining_dancers)
+            number_of_selected_dancers = len(cursor.execute(query).fetchall())
             if number_of_selected_dancers >= limit:
                 break
     connection.commit()
@@ -675,6 +684,7 @@ def print_ntds_config():
     status_print('Levels participating for the Lion:')
     for level in lion_participants:
         status_print('\t{lvl}'.format(lvl=level))
+    status_print('')
 
 
 def welcome_text():
@@ -684,47 +694,69 @@ def welcome_text():
     status_print('You can start a new selection, update an existing selection, '
                  'or change the options with the buttons in the bottom right corner.')
     status_print('')
+    status_print('For an overview of the available commands, type "help" in the command prompt.')
+    status_print('')
     data_text.config(state=NORMAL)
     data_text.delete('1.0', END)
     data_text.insert(END, 'Data about the number of contestants, First Aid Officers, required sleeping locations, etc. '
                           'will be displayed here once a database has been selected.')
     data_text.config(state=DISABLED)
     help_text.config(state=NORMAL)
+    help_text.delete('1.0', END)
     help_text.insert(END, 'Some helpful commands are:\n')
     help_text.insert(END, 'list_available:\n')
     help_text.insert(END, 'Lists all dancers available for selection\n')
     help_text.insert(END, 'list_level: {level=beginners/breiten/open}\n')
-    help_text.insert(END, 'Lists all dancers of the given level available for selection\n')
+    help_text.insert(END, 'Lists all dancers of the given level that are available for selection\n')
     help_text.insert(END, 'list_fa:\n')
-    help_text.insert(END, 'Lists all available First Aid Officers\n')
+    help_text.insert(END, 'Lists all dancers available for selection that are a qualified First Aid Officer\n')
     help_text.insert(END, 'list_ero:\n')
-    help_text.insert(END, 'Lists all available Emergency Response Officers\n')
+    help_text.insert(END, 'Lists all dancers available for selection that are a qualified Emergency Response Officer\n')
     help_text.insert(END, '-add n:\n')
+    help_text.insert(END, 'Selects contestant number "n" for the NTDS\n')
+    help_text.insert(END, '-addp n:\n')
     help_text.insert(END, 'Selects contestant number "n" (and a potential partner) for the NTDS\n')
     help_text.config(state=DISABLED)
 
-db_commands = ['list_fa', 'list_ero', 'list_available', 'list_beginners', 'list_breiten', 'list_open',
-                   'print_contestants',
-                   'finish_selection', 'export']
+
 def command_help_text():
     """"Temp"""
+    status_print('')
     status_print('Listing all commands...')
-    status_print('list_fa:')
+    status_print('')
+    status_print('list_fa')
     status_print('Lists all dancers available for selection that are a qualified First Aid Officer')
-    status_print('list_ero:')
+    status_print('')
+    status_print('list_ero')
     status_print('Lists all dancers available for selection that are a qualified Emergency Response Officer')
-    status_print('list_available:')
+    status_print('')
+    status_print('list_available')
     status_print('Lists all dancers available for selection')
-    status_print('list_beginners:')
+    status_print('')
+    status_print('list_beginners')
     status_print('Lists all Beginners available for selection')
-    status_print('list_breiten:')
+    status_print('')
+    status_print('list_breiten')
     status_print('Lists all dancers with at least one level Breitensport available for selection')
-    status_print('list_open:')
+    status_print('')
+    status_print('list_open')
     status_print('Lists all dancers with at least one level Open Class available for selection')
+    status_print('')
+    status_print('-add n')
+    status_print('Selects contestant number "n" for the NTDS')
+    status_print('')
+    status_print('-addp n')
+    status_print('Selects contestant number "n" (and a potential partner) for the NTDS')
+    status_print('')
     status_print('print_contestants')
     status_print('Prints a list of how much contestants each city has had selected')
+    status_print('')
     status_print('finish_selection')
     status_print('Finishes the NTDS selection by adding random contestants')
+    status_print('')
+    status_print('export')
+    status_print('Creates Excel files containing the selection data')
+    status_print('')
 
 
 def status_print(status_message):
@@ -755,25 +787,16 @@ def print_table(table):
                             dancer[gen_dict[sql_first_aid]], dancer[gen_dict[sql_emergency_response_officer]],
                             dancer[gen_dict[sql_ballroom_jury]], dancer[gen_dict[sql_latin_jury]],
                             dancer[gen_dict[sql_student]], dancer[gen_dict[sql_sleeping_location]],
-                            dancer[gen_dict[sql_current_volunteer]], dancer[gen_dict[sql_previous_volunteer]]]
+                            dancer[gen_dict[sql_current_volunteer]], dancer[gen_dict[sql_previous_volunteer]],
+                            dancer[gen_dict[sql_city]]]
         formatted_table.append(formatted_dancer)
-    # print_table_header = ['Id', 'Name', 'Ballroom level', 'Latin level', 'Ballroom partner', 'Latin partner',
-    #                       'Ballroom role', 'Latin role', \
-    #                       'Ballroom mandatory blind date', 'Latin mandatory blind date',
-    #                       'First Aid', 'Emergency Response Officer', 'Ballroom jury', 'Latin jury', 'Student',
-    #                       'Sleeping location', 'Volunteer', 'Past volunteer']
-    print_table_header = ['Id', 'Name', 'B-lvl', 'L-lvl', 'B-part', 'L-part',
-                          'B-role', 'L-role', 'B-date', 'L-date',
-                          'F.A.', 'E.R.O.', 'B-jury', 'L-jury', 'Student',
-                          'Sleeping', 'Volunteer', 'Past volunteer']
-    # table_cutoff = 24
-    # while len(formatted_table) > table_cutoff:
-    #     status_print(tabulate(formatted_table[:table_cutoff], headers=print_table_header))
-    #     status_print('')
-    #     formatted_table = formatted_table[table_cutoff:]
-    # status_print(tabulate(formatted_table[:table_cutoff], headers=print_table_header))
-    status_print(tabulate(formatted_table, headers=print_table_header))
-    # status_print('')
+    status_text.config(wrap=NONE)
+    print_table_header = ['Id', 'Name', 'Ballroom level', 'Latin level', 'Ballroom partner', 'Latin partner',
+                          'Ballroom role', 'Latin role',
+                          'Ballroom mandatory blind date', 'Latin mandatory blind date',
+                          'First Aid', 'Emergency Response Officer', 'Ballroom jury', 'Latin jury',
+                          'Student', 'Sleeping location', 'Volunteer', 'Past volunteer', 'Team']
+    status_print(tabulate(formatted_table, headers=print_table_header, tablefmt='grid'))
 
 
 def status_update(cursor):
@@ -833,6 +856,8 @@ def status_update(cursor):
     number_of_sleeping_spots = len(cursor.execute(query, (NTDS_options['sleeping_location']['yes'],)).fetchall())
     data_text.config(state=NORMAL)
     data_text.delete('1.0', END)
+    data_text.insert(END, 'Selected database name: {name}\n'.format(name=database_key['db']))
+    data_text.insert(END, '\n')
     data_text.insert(END, 'Total number of contestants: {num}\n'.format(num=number_of_contestants))
     data_text.insert(END, '\n')
     data_text.insert(END, 'Beginners Ballroom Leads: {num}\n'.format(num=number_of_beginner_ballroom_leads))
@@ -875,20 +900,63 @@ def status_update(cursor):
     data_text.config(state=DISABLED)
 
 
+def select_database():
+    """"Temp"""
+    old_database_name = database_key['db']
+    ask_database = Mbox('Please give the database name', (database_key, 'db'))
+    root.wait_window(ask_database.top)
+    if os.path.isfile(database_key['db']) is True and old_database_name != database_key['db']:
+        status_text.config(state=NORMAL)
+        status_text.delete('1.0', END)
+        status_text.config(state=DISABLED)
+        welcome_text()
+        status_print('Selected existing database: {name}'.format(name=database_key['db']))
+        status_print('')
+        print_ntds_config()
+        cli_text.focus_set()
+        sel_conn = sql.connect(database_key['db'])
+        sel_curs = sel_conn.cursor()
+        status_update(cursor=sel_curs)
+        sel_curs.close()
+        sel_conn.close()
+    elif old_database_name != database_key['db']:
+        status_print('"{name}" is not a valid database.'.format(name=database_key['db']))
+
+
+def options_menu():
+    """"Temp"""
+    status_print('Work in progress...')
+
+
 def cli_parser(*args):
     """"Temp"""
     wip = 'Work in progress...'
     command = cli_text.get()
     cli_text.delete(0, END)
-    connection = sql.connect(selected_database)
+    connection = sql.connect(database_key['db'])
     cli_curs = connection.cursor()
     open_commands = ['echo', 'help']
     db_commands = ['list_fa', 'list_ero', 'list_available', 'list_beginners', 'list_breiten', 'list_open',
                    'print_contestants',
                    'finish_selection', 'export']
-    if (command in db_commands or command.startswith('-')) and selected_database != '':
+    if (command in db_commands or command.startswith('-')) and os.path.isfile(database_key['db']) is True:
         if command.startswith('-add '):
             command = command[5:]
+            selected_id = int(command)
+            query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_id)
+            dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+            ballroom_partner = dancer[gen_dict[sql_ballroom_partner]]
+            latin_partner = dancer[gen_dict[sql_latin_partner]]
+            if ballroom_partner != '' or latin_partner != '':
+                status_print('Dancer {num} signed with a partner, selecting both'.format(num=selected_id))
+                partner_id = find_partner(selected_id, connection=connection, cursor=cli_curs, signed_partner_only=True)
+                create_pair(selected_id, partner_id, connection=connection, cursor=cli_curs)
+                move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
+            else:
+                move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+        elif command.startswith('-addp '):
+            command = command[6:]
             selected_id = int(command)
             partner_id = find_partner(selected_id, connection=connection, cursor=cli_curs)
             create_pair(selected_id, partner_id, connection=connection, cursor=cli_curs)
@@ -991,7 +1059,14 @@ def cli_parser(*args):
                 status_print('There are no {lvl} dancers available for selection for the NTDS'.format(lvl=open_class))
                 status_print('')
         elif command == 'finish_selection':
-            select_bulk(max_contestants, connection=connection, cursor=cli_curs)
+            status_print('')
+            status_print('Finishing the selection for the NTDS automatically')
+            select_bulk(max_contestants-1, connection=connection, cursor=cli_curs)
+            # TODO add smart system to fill in gaps
+            # query = 'SELECT * FROM {tn}'.format(tn=selected_list)
+            # number_of_selected_dancers = len(cli_curs.execute(query).fetchall())
+            # if number_of_selected_dancers < max_contestants:
+            #     select_bulk(max_contestants, connection=connection, cursor=cli_curs, no_partner=True)
         elif command == 'print_contestants':
             status_print('')
             collect_city_overview(source_table=selected_list, target_table=contestants_list, users=contestants,
@@ -1007,11 +1082,11 @@ def cli_parser(*args):
         elif command == 'help':
             command_help_text()
     else:
-        if selected_database == '':
+        if os.path.isfile(database_key['db']) is False:
             status_print('Command not available, no open database')
         else:
             status_print('Unknown command: "{command}"'.format(command=command))
-    if selected_database != '':
+    if os.path.isfile(database_key['db']) is True:
         status_update(cursor=cli_curs)
     cli_curs.close()
     connection.close()
@@ -1023,8 +1098,9 @@ def main_selection():
     ####################################################################################################################
     start_time = time.time()
     timestamp = start_time
+    database_key['db'] = database_name
     # Connect to database and create a cursor
-    conn = sql.connect(selected_database)
+    conn = sql.connect(database_key['db'])
     curs = conn.cursor()
     # Create SQL tables
     create_tables(connection=conn, cursor=curs)
@@ -1068,6 +1144,7 @@ def main_selection():
     ####################################################################################################################
     # Select the team captains and (virtual) partners
     ####################################################################################################################
+    status_print('')
     status_print('Selecting team captains...')
     query = 'SELECT * FROM {tn1} WHERE {tc} = "Ja"'.format(tn1=selection_list, tc=sql_team_captain)
     team_captains = curs.execute(query).fetchall()
@@ -1094,8 +1171,10 @@ def main_selection():
     all_beginners = curs.execute(query, (beginner, beginner)).fetchall()
     number_of_signed_beginners = len(all_beginners)
     if number_of_signed_beginners <= beginner_signup_cutoff:
+        status_print('')
         status_print('Less than {num} Beginners signed up.'.format(num=beginner_signup_cutoff+1))
         status_print('Matching up as much couples as possible and selecting everyone...')
+        create_city_beginners_list(competing_cities, connection=conn, cursor=curs)
         for beg in all_beginners:
             beg_id = beg[gen_dict[sql_id]]
             query = 'SELECT * FROM {tn1} WHERE {id} = ?'.format(tn1=selected_list, id=sql_id)
@@ -1105,12 +1184,15 @@ def main_selection():
                 create_pair(beg_id, partner_id, connection=conn, cursor=curs)
                 move_selected_contestant(beg_id, connection=conn, cursor=curs)
                 move_selected_contestant(partner_id, connection=conn, cursor=curs)
+                update_city_beginners(competing_cities, connection=conn, cursor=curs)
         conn.commit()
+        reset_selection_tables(connection=conn, cursor=curs)
 
     ####################################################################################################################
     # Select beginners if more people have signed than the given cutoff
     ####################################################################################################################
     if number_of_signed_beginners > beginner_signup_cutoff:
+        status_print('')
         status_print('More than {num} Beginners signed up.'.format(num=beginner_signup_cutoff))
         status_print('Selecting guaranteed beginners for each team...')
         create_city_beginners_list(competing_cities, connection=conn, cursor=curs)
@@ -1193,6 +1275,7 @@ def main_selection():
     ####################################################################################################################
     # Select guaranteed lions contestants
     ####################################################################################################################
+    status_print('')
     status_print('Selecting guaranteed lions for each team...')
     create_city_lions_list(competing_cities, connection=conn, cursor=curs)
     query = 'SELECT sum({max_lion})-sum({num}) FROM {tn}' \
@@ -1243,45 +1326,12 @@ def main_selection():
     ####################################################################################################################
     # Select remaining contestants
     ####################################################################################################################
+    status_print('')
     status_print('Selecting the bulk of contestants that have signed up...')
-    query = 'SELECT * FROM {tn}'.format(tn=selection_list)
-    available_dancers = curs.execute(query).fetchall()
-    number_of_available_dancers = len(available_dancers)
-    if number_of_available_dancers > 0:
-        random_order = random.sample(range(0, number_of_available_dancers), number_of_available_dancers)
-        for num in range(len(random_order)):
-            dancer = available_dancers[random_order[num]]
-            dancer_id = dancer[gen_dict[sql_id]]
-            if dancer_id is not None:
-                query = ' SELECT * FROM {tn} WHERE {id} = ?'.format(tn=selection_list, id=sql_id)
-                dancer_available = curs.execute(query, (dancer_id,)).fetchone()
-                if dancer_available is not None:
-                    partner_id = find_partner(dancer_id, connection=conn, cursor=curs)
-                    if partner_id is not None:
-                        create_pair(dancer_id, partner_id, connection=conn, cursor=curs)
-                        move_selected_contestant(dancer_id, connection=conn, cursor=curs)
-                        move_selected_contestant(partner_id, connection=conn, cursor=curs)
-            query = 'SELECT * FROM {tn}'.format(tn=selected_list)
-            remaining_dancers = curs.execute(query).fetchall()
-            number_of_selected_dancers = len(remaining_dancers) + buffer_for_selection
-            if number_of_selected_dancers >= max_contestants:
-                break
-    conn.commit()
-    reset_selection_tables(connection=conn, cursor=curs)
+    select_bulk(limit=max_contestants-buffer_for_selection, connection=conn, cursor=curs)
     status_print('')
     status_print("--- Done in %.3f seconds ---" % (time.time() - start_time))
     status_print('')
-
-    ####################################################################################################################
-    # Create signup excel file
-    ####################################################################################################################
-    # otp = selection.replace(".", ("_"+str(start_time)+"."))
-    # wb = openpyxl.Workbook()
-    # wb.save(otp)
-    # if exists(selection):
-    #     wb = openpyxl.load_workbook(selection)
-    # query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=selected_list, id=sql_id)
-    # selected_contestants = curs.execute(query).fetchall()
 
     ####################################################################################################################
     # Collect user data from main selection
@@ -1292,15 +1342,11 @@ def main_selection():
                           cursor=curs, connection=conn)
     collect_city_overview(source_table=selected_list, target_table=contestants_list, users=contestants,
                           cursor=curs, connection=conn)
-
-    ####################################################################################################################
-    # Collect individual data for statistical analysis
-    ####################################################################################################################
     if debug:
         query = 'SELECT * FROM {tn}'.format(tn=signup_list)
         all_dancers = curs.execute(query).fetchall()
-        query = 'SELECT name FROM sqlite_master WHERE type = "table" AND name = "{tn}"'.format(tn=individual_list)
-        individual_table_exists = len(curs.execute(query).fetchall())
+        query = 'SELECT name FROM sqlite_master WHERE type = ? AND name = ?'
+        individual_table_exists = len(curs.execute(query, ('table', individual_list)).fetchall())
         if individual_table_exists == 0:
             query = 'CREATE TABLE IF NOT EXISTS {tn} ({run} INTEGER PRIMARY KEY, '\
                 .format(tn=individual_list, run=sql_run)
@@ -1311,25 +1357,18 @@ def main_selection():
             query += ')'
             curs.execute(query)
         query = 'SELECT {run} FROM {tn}'.format(tn=individual_list, run=sql_run)
-        last_run = len(curs.execute(query).fetchall())
-        this_run = last_run + 1
+        this_run = len(curs.execute(query).fetchall()) + 1
         query = 'INSERT INTO {tn} ({run}) VALUES (?)'.format(tn=individual_list, run=sql_run)
         curs.execute(query, (this_run,))
         for dancer in all_dancers:
             dancer_id = dancer[gen_dict[sql_id]]
             query = 'SELECT * FROM {tn} WHERE {id} = ?'.format(id=sql_id, tn=selected_list)
-            dancer_selected = curs.execute(query, (dancer_id,)).fetchall()
-            if len(dancer_selected) == 0:
-                dancer_selected = 0
-            else:
-                dancer_selected = 1
+            dancer_selected = len(curs.execute(query, (dancer_id,)).fetchall())
             query = 'UPDATE {tn} SET "{col}" = ? WHERE {run} = ?'.format(tn=individual_list, run=sql_run, col=dancer_id)
             curs.execute(query, (dancer_selected, this_run))
         conn.commit()
-
     # Update status
     status_update(cursor=curs)
-
     # Close cursor and connection
     curs.close()
     conn.close()
@@ -1338,41 +1377,37 @@ if __name__ == "__main__":
     root = Tk()
     root.geometry("1820x900")
     root.state('zoomed')
-    # root.option_add("*Font", tkFont.nametofont('TkFixedFont'))
+    root.title('NTDS 2018 Selection (alpha)')
     pad_out = 8
     pad_in = 8
     frame = Frame()
     frame.place(in_=root, anchor="c", relx=.50, rely=.50)
-    xscrollbar = Scrollbar(master=frame, orient=HORIZONTAL)
-    xscrollbar.grid(row=2, column=0, padx=pad_in, sticky=E+W)
+    x_scrollbar = Scrollbar(master=frame, orient=HORIZONTAL)
+    x_scrollbar.grid(row=2, column=0, padx=pad_in, sticky=E+W)
     status_text = Text(master=frame, width=148, height=50, padx=pad_in, pady=pad_in,
-                       xscrollcommand=True, yscrollcommand=True, state=DISABLED, wrap=NONE)
+                       xscrollcommand=x_scrollbar, yscrollcommand=True, state=DISABLED, wrap=NONE)
     status_text.grid(row=0, column=0, padx=pad_out, rowspan=2)
-    xscrollbar.config(command=status_text.xview)
+    x_scrollbar.config(command=status_text.xview)
     cli_text = Entry(master=frame, width=200)
     cli_text.grid(row=3, column=0, padx=pad_in, pady=pad_out)
     cli_text.bind('<Return> ', cli_parser)
     data_help_frame = Frame(master=frame)
     data_help_frame.grid(row=0, column=1, rowspan=4, columnspan=3)
-    data_text = Text(master=data_help_frame, width=70, height=30, padx=pad_in, pady=pad_in, wrap=WORD, state=DISABLED)
+    data_text = Text(master=data_help_frame, width=70, height=32, padx=pad_in, pady=pad_in, wrap=WORD, state=DISABLED)
     data_text.grid(row=0, column=0, padx=pad_out, columnspan=3)
     padding_frame = Frame(master=data_help_frame, height=16)
     padding_frame.grid(row=1, column=0)
-    help_text = Text(master=data_help_frame, width=70, height=19, padx=pad_in, pady=pad_in, wrap=WORD, state=DISABLED)
+    help_text = Text(master=data_help_frame, width=70, height=17, padx=pad_in, pady=pad_in, wrap=WORD, state=DISABLED)
     help_text.grid(row=2, column=0, padx=pad_out, columnspan=3)
     start_button = Button(master=data_help_frame, text='Start new selection database', command=main_selection)
     start_button.grid(row=3, column=0, padx=pad_out, pady=pad_in)
-    update_button = Button(master=data_help_frame, text='Select existing database')
+    update_button = Button(master=data_help_frame, text='Select existing database', command=select_database)
     update_button.grid(row=3, column=1, padx=pad_out)
-    options_button = Button(master=data_help_frame, text='Options')
+    options_button = Button(master=data_help_frame, text='Options', command=options_menu)
     options_button.grid(row=3, column=2, padx=pad_out)
     welcome_text()
     print_ntds_config()
     cli_text.focus_set()
-    if selected_database != '':
-        main_conn = sql.connect(selected_database)
-        main_curs = main_conn.cursor()
-        status_update(cursor=main_curs)
-        main_curs.close()
-        main_conn.close()
+    select_db = Mbox
+    select_db.root = root
     root.mainloop()
