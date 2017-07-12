@@ -17,21 +17,31 @@ import os.path
 import configparser
 
 # Setup configuration and setting files
-config = configparser.ConfigParser()
-config_key = {'name': 'config.ini', 'folder': 'config', 'path': ''}
+config_folder = 'config'
+settings_folder = 'settings'
+statistics_folder = 'statistics'
+config_parser = configparser.ConfigParser()
+config_key = {'name': 'config.ini', 'folder': config_folder, 'path': ''}
 config_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), config_key['folder'])
 config_key['path'] = os.path.join(config_key['path'], config_key['name'])
-settings_key = {'name': 'user_settings.ini', 'folder': 'settings', 'path': ''}
+settings_key = {'name': 'user_settings.ini', 'folder': settings_folder, 'path': ''}
 settings_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), settings_key['folder'])
 settings_key['path'] = os.path.join(settings_key['path'], settings_key['name'])
+participating_teams_key = {'name': 'NTDS_participating_teams.ini', 'folder': config_folder, 'path': ''}
+participating_teams_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                               participating_teams_key['folder'])
+participating_teams_key['path'] = os.path.join(participating_teams_key['path'], participating_teams_key['name'])
+template_key = {'name': 'NTDS_Template.xlsx', 'folder': config_folder, 'path': ''}
+template_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), template_key['folder'])
+template_key['path'] = os.path.join(template_key['path'], template_key['name'])
 
 debug = False
 
 # TODO controle programma voor inschrijflijst
+# TODO voer randomly beginner(s) toe
 
 # init stuff
 participating_teams = 'deelnemende_teams.xlsx'
-template = 'NTDS_Template.xlsx'
 selection = 'NTDS_Selection.xlsx'
 
 # boundaries
@@ -630,35 +640,15 @@ def create_tables(connection, cursor):
 
 def create_competing_teams(connection, cursor):
     """"Creates list of all competing cities"""
-    # Create Workbook object and a Worksheet from it
-    wb = openpyxl.load_workbook(participating_teams)
-    ws = wb.worksheets[0]
-    max_row = max_rc('row', ws)
-    # Empty 2d list that will contain the signup sheet file names for each of the teams
+    # Empty list that will contain the signup sheet file names for each of the teams
     competing_cities_array = []
-    # Fill up list with competing cities
-    for r in range(2, max_row + 1):
-        competing_cities_array \
-            .append([ws.cell(row=r, column=1).value, ws.cell(row=r, column=2).value, ws.cell(row=r, column=3).value])
-    query = 'INSERT INTO {tn} VALUES (?, ?, ?)'.format(tn=team_list)
-    for row in competing_cities_array:
-        cursor.execute(query, row)
-    connection.commit()
-    return competing_cities_array
-
-
-def create_competing_teams2(connection, cursor):
-    """"Creates list of all competing cities"""
-    # Create Workbook object and a Worksheet from it
-    wb = openpyxl.load_workbook(participating_teams)
-    ws = wb.worksheets[0]
-    max_row = max_rc('row', ws)
-    # Empty 2d list that will contain the signup sheet filenames for each of the teams
-    competing_cities_array = []
-    # Fill up list with competing cities
-    for r in range(2, max_row + 1):
-        competing_cities_array \
-            .append([ws.cell(row=r, column=1).value, ws.cell(row=r, column=2).value, ws.cell(row=r, column=3).value])
+    # Reads file containing the participating teams
+    config_parser.read(participating_teams_key['path'])
+    sections = config_parser.sections()
+    # Write signup sheets into database
+    for section in sections:
+        team = config_parser[section]
+        competing_cities_array.append([team['TeamName'], team['City'], team['SignupSheet']])
     query = 'INSERT INTO {tn} VALUES (?, ?, ?)'.format(tn=team_list)
     for row in competing_cities_array:
         cursor.execute(query, row)
@@ -741,7 +731,7 @@ def welcome_text():
     data_text.config(state=NORMAL)
     data_text.delete('1.0', END)
     data_text.insert(END, 'Data about the number of contestants, First Aid Officers, required sleeping locations, etc. '
-                          'will be displayed here once a database has been selected.')
+                          'will be displayed here once a database has been created/selected.')
     data_text.config(state=DISABLED)
     help_text.config(state=NORMAL)
     help_text.delete('1.0', END)
@@ -1210,7 +1200,7 @@ def main_selection():
     competing_teams = create_competing_teams(connection=conn, cursor=curs)
     competing_cities = [row[team_dict[sql_city]] for row in competing_teams]
     # Get maximum number of columns
-    wb = openpyxl.load_workbook(template)
+    wb = openpyxl.load_workbook(template_key['path'])
     ws = wb.worksheets[0]
     max_col = max_rc('col', ws)
     # Copy the signup list from every team into the SQL database
