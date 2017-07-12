@@ -12,13 +12,21 @@ from tabulate import tabulate
 # logger.setLevel(logging.DEBUG)
 # logger.addHandler(logging.StreamHandler())
 from tkinter import *
-from tkinter import messagebox
-from classes.Mbox import Mbox
+from classes.entrybox import entrybox
 import os.path
+import configparser
+
+# Setup configuration and setting files
+config = configparser.ConfigParser()
+config_key = {'name': 'config.ini', 'folder': 'config', 'path': ''}
+config_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), config_key['folder'])
+config_key['path'] = os.path.join(config_key['path'], config_key['name'])
+settings_key = {'name': 'user_settings.ini', 'folder': 'settings', 'path': ''}
+settings_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), settings_key['folder'])
+settings_key['path'] = os.path.join(settings_key['path'], settings_key['name'])
 
 debug = False
 
-# TODO CLI
 # TODO controle programma voor inschrijflijst
 
 # init stuff
@@ -28,16 +36,15 @@ selection = 'NTDS_Selection.xlsx'
 
 # boundaries
 max_contestants = 400
-max_fixed_beginner_pairs = 2
-max_fixed_beginners = max_fixed_beginner_pairs*2
-beginner_signup_cutoff = 80
-max_fixed_lion_pairs = 5
-max_fixed_lion_contestants = max_fixed_lion_pairs*2
+max_fixed_beginners = 4
+beginner_signup_cutoff = int(max_contestants*0.2)
+max_fixed_lion_contestants = 10
 buffer_for_selection = 40
 
 # Names
-database_name = 'main_data.db'
-database_key = {'db': ''}
+default_db_name = 'NTDS'
+database_key = {'db': '', 'path': ''}
+db_ext = '.db'
 signup_list = 'signup_list'
 selection_list = 'selection_list'
 selected_list = 'selected_list'
@@ -469,6 +476,17 @@ def move_selected_contestant(identifier, connection, cursor):
         status_print('Selected {} for the NTDS'.format(identifier))
 
 
+def remove_selected_contestant(identifier, connection, cursor):
+    """Temp"""
+    if identifier is not None:
+        query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE id = ?;'.format(tn1=selection_list, tn2=signup_list)
+        cursor.execute(query, (identifier,))
+        query = 'DELETE FROM {tn} WHERE id = ?'.format(tn=selected_list)
+        cursor.execute(query, (identifier,))
+        connection.commit()
+        status_print('Removed {} from the NTDS'.format(identifier))
+
+
 def create_city_beginners_list(cities_list, connection, cursor):
     """"Temp"""
     for city in cities_list:
@@ -616,6 +634,25 @@ def create_competing_teams(connection, cursor):
     wb = openpyxl.load_workbook(participating_teams)
     ws = wb.worksheets[0]
     max_row = max_rc('row', ws)
+    # Empty 2d list that will contain the signup sheet file names for each of the teams
+    competing_cities_array = []
+    # Fill up list with competing cities
+    for r in range(2, max_row + 1):
+        competing_cities_array \
+            .append([ws.cell(row=r, column=1).value, ws.cell(row=r, column=2).value, ws.cell(row=r, column=3).value])
+    query = 'INSERT INTO {tn} VALUES (?, ?, ?)'.format(tn=team_list)
+    for row in competing_cities_array:
+        cursor.execute(query, row)
+    connection.commit()
+    return competing_cities_array
+
+
+def create_competing_teams2(connection, cursor):
+    """"Creates list of all competing cities"""
+    # Create Workbook object and a Worksheet from it
+    wb = openpyxl.load_workbook(participating_teams)
+    ws = wb.worksheets[0]
+    max_row = max_rc('row', ws)
     # Empty 2d list that will contain the signup sheet filenames for each of the teams
     competing_cities_array = []
     # Fill up list with competing cities
@@ -675,15 +712,20 @@ def collect_city_overview(source_table, target_table, users, cursor, connection)
 
 def print_ntds_config():
     """"Temp"""
+    status_print('Using default settings.')
+    status_print('')
     status_print('Contestant numbers for this NTDS selection:')
+    status_print('')
     status_print('Maximum number of contestants: {num}'.format(num=max_contestants))
     status_print('Guaranteed beginners per team: {num}'.format(num=max_fixed_beginners))
     status_print('Guaranteed Lion contestants per team: {num}'.format(num=max_fixed_lion_contestants))
     status_print('Cutoff for selecting all beginners: {num}'.format(num=beginner_signup_cutoff))
     status_print('Buffer for selecting contestants at the end: {num}'.format(num=buffer_for_selection))
-    status_print('Levels participating for the Lion:')
+    msg = 'Levels participating for the Lion: '
     for level in lion_participants:
-        status_print('\t{lvl}'.format(lvl=level))
+        msg += '{lvl}, '.format(lvl=level)
+    msg = msg[:-2]
+    status_print(msg)
     status_print('')
 
 
@@ -705,17 +747,19 @@ def welcome_text():
     help_text.delete('1.0', END)
     help_text.insert(END, 'Some helpful commands are:\n')
     help_text.insert(END, 'list_available:\n')
-    help_text.insert(END, 'Lists all dancers available for selection\n')
+    help_text.insert(END, 'Lists all dancers available for selection.\n')
     help_text.insert(END, 'list_level: {level=beginners/breiten/open}\n')
-    help_text.insert(END, 'Lists all dancers of the given level that are available for selection\n')
-    help_text.insert(END, 'list_fa:\n')
-    help_text.insert(END, 'Lists all dancers available for selection that are a qualified First Aid Officer\n')
-    help_text.insert(END, 'list_ero:\n')
-    help_text.insert(END, 'Lists all dancers available for selection that are a qualified Emergency Response Officer\n')
+    help_text.insert(END, 'Lists all dancers of the given level that are available for selection.\n')
+    # help_text.insert(END, 'list_fa:\n')
+    # help_text.insert(END, 'Lists all dancers available for selection that are a qualified First Aid Officer.\n')
+    # help_text.insert(END, 'list_ero:\n')
+    # help_text.insert(END, 'Lists all dancers available for selection that are a qualified Emergency Response Officer.\n')
     help_text.insert(END, '-add n:\n')
-    help_text.insert(END, 'Selects contestant number "n" for the NTDS\n')
+    help_text.insert(END, 'Selects contestant number "n" for the NTDS.\n')
     help_text.insert(END, '-addp n:\n')
-    help_text.insert(END, 'Selects contestant number "n" (and a potential partner) for the NTDS\n')
+    help_text.insert(END, 'Selects contestant number "n" (and a potential partner) for the NTDS.\n')
+    help_text.insert(END, '-remove n:\n')
+    help_text.insert(END, 'Removes contestant number "n" from the selected contestants.\n')
     help_text.config(state=DISABLED)
 
 
@@ -731,31 +775,34 @@ def command_help_text():
     status_print('Lists all dancers available for selection that are a qualified Emergency Response Officer')
     status_print('')
     status_print('list_available')
-    status_print('Lists all dancers available for selection')
+    status_print('Lists all dancers available for selection.')
     status_print('')
     status_print('list_beginners')
-    status_print('Lists all Beginners available for selection')
+    status_print('Lists all Beginners available for selection.')
     status_print('')
     status_print('list_breiten')
-    status_print('Lists all dancers with at least one level Breitensport available for selection')
+    status_print('Lists all dancers with at least one level Breitensport available for selection.')
     status_print('')
     status_print('list_open')
-    status_print('Lists all dancers with at least one level Open Class available for selection')
+    status_print('Lists all dancers with at least one level Open Class available for selection.')
     status_print('')
     status_print('-add n')
-    status_print('Selects contestant number "n" for the NTDS')
+    status_print('Selects contestant number "n" for the NTDS.')
     status_print('')
     status_print('-addp n')
-    status_print('Selects contestant number "n" (and a potential partner) for the NTDS')
+    status_print('Selects contestant number "n" (and a potential partner) for the NTDS.')
+    status_print('')
+    status_print('-remove n')
+    status_print('Removes contestant number "n" from the selected contestants.')
     status_print('')
     status_print('print_contestants')
-    status_print('Prints a list of how much contestants each city has had selected')
+    status_print('Prints a list of how much contestants each city has had selected. ')
     status_print('')
     status_print('finish_selection')
-    status_print('Finishes the NTDS selection by adding random contestants')
+    status_print('Finishes the NTDS selection by adding random contestants.')
     status_print('')
     status_print('export')
-    status_print('Creates Excel files containing the selection data')
+    status_print('Creates Excel files containing the selection data.')
     status_print('')
 
 
@@ -856,7 +903,7 @@ def status_update(cursor):
     number_of_sleeping_spots = len(cursor.execute(query, (NTDS_options['sleeping_location']['yes'],)).fetchall())
     data_text.config(state=NORMAL)
     data_text.delete('1.0', END)
-    data_text.insert(END, 'Selected database name: {name}\n'.format(name=database_key['db']))
+    data_text.insert(END, 'Selected database name: {name}\n'.format(name=database_key['path']))
     data_text.insert(END, '\n')
     data_text.insert(END, 'Total number of contestants: {num}\n'.format(num=number_of_contestants))
     data_text.insert(END, '\n')
@@ -903,24 +950,24 @@ def status_update(cursor):
 def select_database():
     """"Temp"""
     old_database_name = database_key['db']
-    ask_database = Mbox('Please give the database name', (database_key, 'db'))
+    ask_database = entrybox('Please give the database name', (database_key, 'db'))
     root.wait_window(ask_database.top)
-    if os.path.isfile(database_key['db']) is True and old_database_name != database_key['db']:
+    database_key['path'] = database_key['db'] + db_ext
+    if os.path.isfile(path=database_key['path']) is True and old_database_name != database_key['db']:
         status_text.config(state=NORMAL)
         status_text.delete('1.0', END)
         status_text.config(state=DISABLED)
-        welcome_text()
-        status_print('Selected existing database: {name}'.format(name=database_key['db']))
+        status_print('Selected existing database: {name}'.format(name=database_key['path']))
         status_print('')
         print_ntds_config()
         cli_text.focus_set()
-        sel_conn = sql.connect(database_key['db'])
+        sel_conn = sql.connect(database_key['path'])
         sel_curs = sel_conn.cursor()
         status_update(cursor=sel_curs)
         sel_curs.close()
         sel_conn.close()
-    elif old_database_name != database_key['db']:
-        status_print('"{name}" is not a valid database.'.format(name=database_key['db']))
+    elif os.path.isfile(path=database_key['path']) is False or old_database_name != database_key['db']:
+        status_print('"{name}" is not a valid database.'.format(name=database_key['path']))
 
 
 def options_menu():
@@ -933,13 +980,14 @@ def cli_parser(*args):
     wip = 'Work in progress...'
     command = cli_text.get()
     cli_text.delete(0, END)
-    connection = sql.connect(database_key['db'])
+    connection = sql.connect(database_key['path'])
     cli_curs = connection.cursor()
     open_commands = ['echo', 'help']
-    db_commands = ['list_fa', 'list_ero', 'list_available', 'list_beginners', 'list_breiten', 'list_open',
+    db_commands = ['list_available', 'list_beginners', 'list_breiten', 'list_open',
+                   'list_fa', 'list_ero', 'list_ballroom_jury', 'list_latin_jury',
                    'print_contestants',
                    'finish_selection', 'export']
-    if (command in db_commands or command.startswith('-')) and os.path.isfile(database_key['db']) is True:
+    if (command in db_commands or command.startswith('-')) and os.path.isfile(database_key['path']) is True:
         if command.startswith('-add '):
             command = command[5:]
             selected_id = int(command)
@@ -962,47 +1010,10 @@ def cli_parser(*args):
             create_pair(selected_id, partner_id, connection=connection, cursor=cli_curs)
             move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
             move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
-        elif command == 'list_fa':
-            query = 'SELECT * FROM {tn} WHERE {first_aid} = ?'.format(tn=selection_list, first_aid=sql_first_aid)
-            available_contestants = cli_curs.execute(query, (NTDS_options['first_aid']['maybe'],)).fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('Contestants that MIGHT want to volunteer as a First Aid Officer:')
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            available_contestants = cli_curs.execute(query, (NTDS_options['first_aid']['yes'],)).fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('Contestants that want to volunteer as a First Aid Officer:')
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            else:
-                status_print('There are no volunteers available for selection that are a qualified First Aid Officer')
-                status_print('')
-        elif command == 'list_ero':
-            query = 'SELECT * FROM {tn} WHERE {ero} = ?'.format(tn=selection_list, ero=sql_emergency_response_officer)
-            available_contestants = cli_curs.execute(query, (NTDS_options['emergency_response_officer']['maybe'],))\
-                .fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('Contestants that MIGHT want to volunteer as a Emergency Response Officer:')
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            available_contestants = cli_curs.execute(query, (NTDS_options['emergency_response_officer']['yes'],)) \
-                .fetchall()
-            if len(available_contestants) > 0:
-                status_print('')
-                status_print('Contestants that want to volunteer as a Emergency Response Officer:')
-                status_print('')
-                print_table(available_contestants)
-                status_print('')
-            else:
-                status_print('There are no volunteers available for selection that are a qualified '
-                             'Emergency Response Officer')
-                status_print('')
+        elif command.startswith('-remove '):
+            command = command[8:]
+            selected_id = int(command)
+            remove_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
         elif command == 'list_available':
             query = 'SELECT * FROM {tn}'.format(tn=selection_list)
             available_contestants = cli_curs.execute(query).fetchall()
@@ -1058,6 +1069,91 @@ def cli_parser(*args):
             else:
                 status_print('There are no {lvl} dancers available for selection for the NTDS'.format(lvl=open_class))
                 status_print('')
+        elif command == 'list_fa':
+            query = 'SELECT * FROM {tn} WHERE {first_aid} = ?'.format(tn=selection_list, first_aid=sql_first_aid)
+            available_contestants = cli_curs.execute(query, (NTDS_options['first_aid']['maybe'],)).fetchall()
+            if len(available_contestants) > 0:
+                status_print('')
+                status_print('Contestants that MIGHT want to volunteer as a First Aid Officer:')
+                status_print('')
+                print_table(available_contestants)
+                status_print('')
+            available_contestants = cli_curs.execute(query, (NTDS_options['first_aid']['yes'],)).fetchall()
+            if len(available_contestants) > 0:
+                status_print('')
+                status_print('Contestants that want to volunteer as a First Aid Officer:')
+                status_print('')
+                print_table(available_contestants)
+                status_print('')
+            else:
+                status_print('There are no volunteers available for selection that are a qualified First Aid Officer')
+                status_print('')
+        elif command == 'list_ero':
+            query = 'SELECT * FROM {tn} WHERE {ero} = ?'.format(tn=selection_list, ero=sql_emergency_response_officer)
+            available_contestants = cli_curs.execute(query, (NTDS_options['emergency_response_officer']['maybe'],))\
+                .fetchall()
+            if len(available_contestants) > 0:
+                status_print('')
+                status_print('Contestants that MIGHT want to volunteer as an Emergency Response Officer:')
+                status_print('')
+                print_table(available_contestants)
+                status_print('')
+            available_contestants = cli_curs.execute(query, (NTDS_options['emergency_response_officer']['yes'],)) \
+                .fetchall()
+            if len(available_contestants) > 0:
+                status_print('')
+                status_print('Contestants that want to volunteer as an Emergency Response Officer:')
+                status_print('')
+                print_table(available_contestants)
+                status_print('')
+            else:
+                status_print('There are no volunteers available for selection that are a qualified '
+                             'Emergency Response Officer')
+                status_print('')
+        elif command == 'list_ballroom_jury':
+            query = 'SELECT * FROM {tn} WHERE {ballroom_jury} = ?'\
+                .format(tn=selection_list, ballroom_jury=sql_ballroom_jury)
+            available_contestants = cli_curs.execute(query, (NTDS_options['ballroom_jury']['maybe'],))\
+                .fetchall()
+            if len(available_contestants) > 0:
+                status_print('')
+                status_print('Contestants that MIGHT want to volunteer as Ballroom Jury:')
+                status_print('')
+                print_table(available_contestants)
+                status_print('')
+            available_contestants = cli_curs.execute(query, (NTDS_options['ballroom_jury']['yes'],)) \
+                .fetchall()
+            if len(available_contestants) > 0:
+                status_print('')
+                status_print('Contestants that want to volunteer as a Ballroom Jury:')
+                status_print('')
+                print_table(available_contestants)
+                status_print('')
+            else:
+                status_print('There are no volunteers available for selection that want to volunteer as Ballroom Jury.')
+                status_print('')
+        elif command == 'list_latin_jury':
+            query = 'SELECT * FROM {tn} WHERE {latin_jury} = ?'\
+                .format(tn=selection_list, latin_jury=sql_latin_jury)
+            available_contestants = cli_curs.execute(query, (NTDS_options['latin_jury']['maybe'],))\
+                .fetchall()
+            if len(available_contestants) > 0:
+                status_print('')
+                status_print('Contestants that MIGHT want to volunteer as Latin Jury:')
+                status_print('')
+                print_table(available_contestants)
+                status_print('')
+            available_contestants = cli_curs.execute(query, (NTDS_options['latin_jury']['yes'],)) \
+                .fetchall()
+            if len(available_contestants) > 0:
+                status_print('')
+                status_print('Contestants that want to volunteer as a Latin Jury:')
+                status_print('')
+                print_table(available_contestants)
+                status_print('')
+            else:
+                status_print('There are no volunteers available for selection that want to volunteer as Latin Jury.')
+                status_print('')
         elif command == 'finish_selection':
             status_print('')
             status_print('Finishing the selection for the NTDS automatically')
@@ -1081,12 +1177,12 @@ def cli_parser(*args):
             status_print(command)
         elif command == 'help':
             command_help_text()
-    else:
-        if os.path.isfile(database_key['db']) is False:
+    elif command != '':
+        if os.path.isfile(database_key['path']) is False:
             status_print('Command not available, no open database')
         else:
             status_print('Unknown command: "{command}"'.format(command=command))
-    if os.path.isfile(database_key['db']) is True:
+    if os.path.isfile(database_key['path']) is True:
         status_update(cursor=cli_curs)
     cli_curs.close()
     connection.close()
@@ -1098,11 +1194,17 @@ def main_selection():
     ####################################################################################################################
     start_time = time.time()
     timestamp = start_time
-    database_key['db'] = database_name
     # Connect to database and create a cursor
-    conn = sql.connect(database_key['db'])
+    status_print('')
+    status_print('Creating new database...')
+    status_print('Database name: {name}'.format(name=default_db_name+db_ext))
+    conn = sql.connect(default_db_name+db_ext)
     curs = conn.cursor()
+    database_key['db'] = default_db_name
+    database_key['path'] = database_key['db'] + db_ext
     # Create SQL tables
+    status_print('')
+    status_print('Creating tables...')
     create_tables(connection=conn, cursor=curs)
     # Create competing cities list
     competing_teams = create_competing_teams(connection=conn, cursor=curs)
@@ -1114,6 +1216,8 @@ def main_selection():
     # Copy the signup list from every team into the SQL database
     total_signup_list = list()
     total_number_of_contestants = 0
+    status_print('')
+    status_print('Collecting signup data...')
     for team in competing_teams:
         city = team[team_dict[sql_city]]
         team_signup_list = team[team_dict[sql_signup_list]]
@@ -1408,6 +1512,6 @@ if __name__ == "__main__":
     welcome_text()
     print_ntds_config()
     cli_text.focus_set()
-    select_db = Mbox
+    select_db = entrybox
     select_db.root = root
     root.mainloop()
