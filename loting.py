@@ -15,6 +15,12 @@ from tkinter import *
 from classes.entrybox import entrybox
 import os.path
 import configparser
+import textwrap
+import shutil
+
+default_db_name = 'NTDS'
+database_key = {'db': '', 'path': ''}
+db_ext = '.db'
 
 # Setup configuration and setting files
 config_folder = 'config'
@@ -34,17 +40,26 @@ participating_teams_key['path'] = os.path.join(participating_teams_key['path'], 
 template_key = {'name': 'NTDS_Template.xlsx', 'folder': config_folder, 'path': ''}
 template_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), template_key['folder'])
 template_key['path'] = os.path.join(template_key['path'], template_key['name'])
+output_key = {'name': 'NTDS_Selection.xlsx', 'folder': 'output', 'path': ''}
+output_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), output_key['folder'])
+output_key['path'] = os.path.join(output_key['path'], output_key['name'])
 
 debug = False
 
 # TODO controle programma voor inschrijflijst
-# TODO voer randomly beginner(s) toe
+# TODO export, add formatting
+# TODO check when manually adding dancer that he/she isn't already selected
+# TODO create files and folders on first run
+# TODO config and user settings
+# TODO add delete option (dancer signed out of NTDS)
+# TODO rework counting lions, error in counting (it accidentally counts non lion contestants matched with a
+# lion contestant. rework update_city_lions function
+# TODO refactor (remove hardcoded material that snuck in)
 
 # init stuff
-participating_teams = 'deelnemende_teams.xlsx'
-selection = 'NTDS_Selection.xlsx'
+status_text_width = 120
 
-# boundaries
+# Boundaries
 max_contestants = 400
 max_fixed_beginners = 4
 beginner_signup_cutoff = int(max_contestants*0.2)
@@ -52,12 +67,11 @@ max_fixed_lion_contestants = 10
 buffer_for_selection = 40
 
 # Names
-default_db_name = 'NTDS'
-database_key = {'db': '', 'path': ''}
-db_ext = '.db'
 signup_list = 'signup_list'
+canceled_list = 'canceled_list'
 selection_list = 'selection_list'
 selected_list = 'selected_list'
+backup_list = 'backup_list'
 team_list = 'team_list'
 partners_list = 'partners_list'
 ref_partner_list = 'reference_partner_list'
@@ -73,21 +87,26 @@ Lions = 'Lions'
 contestants = 'contestants'
 
 # more names
-breiten = 'Breiten'
-beginner = 'Beginner'
-open_class = 'Open'
-lead = 'Lead'
-follow = 'Follow'
+levels = {'beg': 'Beginners', 'breiten': 'Breitensport', 'closed': 'CloseD', 'open': 'Open Class', 0: ''}
+beginner = levels['beg']
+breiten = levels['breiten']
+closed = levels['closed']
+open_class = levels['open']
+roles = {'l': 'Lead', 'f': 'Follow', 0: ''}
+lead = roles['l']
+follow = roles['f']
 
 # options
 yes = 'Ja'
 maybe = 'Misschien'
+options_ym = {'yes': yes, 'maybe': maybe, 0: ''}
+option_y = {'yes': yes, 0: ''}
 
 # selectable options
-NTDS_ballroom_level = {0: beginner, 1: breiten, 2: open_class}
-NTDS_latin_level = {0: beginner, 1: breiten, 2: open_class}
-NTDS_ballroom_role = {0: lead, 1: follow, 2: ''}
-NTDS_latin_role = {0: lead, 1: follow, 2: ''}
+NTDS_ballroom_level = levels
+NTDS_latin_level = levels
+NTDS_ballroom_role = roles
+NTDS_latin_role = roles
 NTDS_ballroom_mandatory_blind_date = {'yes': yes, 0: ''}
 NTDS_latin_mandatory_blind_date = {'yes': yes, 0: ''}
 NTDS_team_captain = {'yes': yes, 0: ''}
@@ -146,6 +165,11 @@ gen_dict = {sql_id: 0, sql_first_name: 1, sql_ln_prefix: 2, sql_last_name: 3, sq
             sql_student: 18, sql_sleeping_location: 19, sql_diet: 20,
             sql_current_volunteer: 21, sql_previous_volunteer: 22,
             sql_city: 23}
+output_title = []
+for key in gen_dict:
+    output_title.append(key)
+output_title = tuple(output_title)
+
 # SQL Table column names and dictionary of teams list
 sql_team = 'team'
 sql_signup_list = 'signup_list'
@@ -161,7 +185,7 @@ sql_ballroom_level_lead = 'ballroom_level_lead'
 sql_ballroom_level_follow = 'ballroom_level_follow'
 sql_latin_level_lead = 'latin_level_lead'
 sql_latin_level_follow = 'latin_level_follow'
-partner_dict = {sql_lead: 1, sql_follow: 2, sql_city_lead: 3, sql_city_follow: 4,
+partner_dict = {sql_no: 0, sql_lead: 1, sql_follow: 2, sql_city_lead: 3, sql_city_follow: 4,
                 sql_ballroom_level_lead: 5, sql_ballroom_level_follow: 6,
                 sql_latin_level_lead: 7, sql_latin_level_follow: 8}
 
@@ -451,7 +475,7 @@ def create_pair(first_dancer, second_dancer, connection, cursor):
         second_dancer_ballroom_level = second_dancer[gen_dict[sql_ballroom_level]]
         second_dancer_latin_level = second_dancer[gen_dict[sql_latin_level]]
     query = 'INSERT INTO {tn} ({lead}, {follow}, {lead_city}, {follow_city}, ' \
-            '{ballroom_level_lead}, {ballroom_level_follow}, {latin_level_lead}, latin_level_follow) ' \
+            '{ballroom_level_lead}, {ballroom_level_follow}, {latin_level_lead}, {latin_level_follow}) ' \
             'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'\
         .format(tn=partners_list,
                 lead=sql_lead, follow=sql_follow, lead_city=sql_city_lead, follow_city=sql_city_follow,
@@ -461,7 +485,7 @@ def create_pair(first_dancer, second_dancer, connection, cursor):
                            first_dancer_ballroom_level, second_dancer_ballroom_level,
                            first_dancer_latin_level, second_dancer_latin_level))
     query = 'INSERT INTO {tn} ({lead}, {follow}, {lead_city}, {follow_city}, ' \
-            '{ballroom_level_lead}, {ballroom_level_follow}, {latin_level_lead}, latin_level_follow) ' \
+            '{ballroom_level_lead}, {ballroom_level_follow}, {latin_level_lead}, {latin_level_follow}) ' \
             'VALUES (?, ?, ?, ?, ?, ?, ?, ?)' \
         .format(tn=ref_partner_list,
                 lead=sql_lead, follow=sql_follow, lead_city=sql_city_lead, follow_city=sql_city_follow,
@@ -489,9 +513,44 @@ def move_selected_contestant(identifier, connection, cursor):
 def remove_selected_contestant(identifier, connection, cursor):
     """Temp"""
     if identifier is not None:
-        query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE id = ?;'.format(tn1=selection_list, tn2=signup_list)
+        query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_lead)
+        couple = cursor.execute(query, (identifier,)).fetchall()
+        role = ''
+        if len(couple) == 0:
+            query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_follow)
+            couple = cursor.execute(query, (identifier,)).fetchall()
+            if len(couple) != 0:
+                role = roles['f']
+        elif len(couple) != 0:
+            role = roles['l']
+        couple = couple[0]
+        couple_id = couple[partner_dict[sql_no]]
+        if role == roles['l']:
+            query = 'UPDATE {tn} SET {role} = "", {city} = "", {ballroom_level} = "", ' \
+                    '{latin_level} = "" WHERE {role} = ?' \
+                .format(tn=ref_partner_list,
+                        role=sql_lead, city=sql_city_lead,
+                        ballroom_level=sql_ballroom_level_lead, latin_level=sql_latin_level_lead)
+            cursor.execute(query, (identifier,))
+        elif role == roles['f']:
+            query = 'UPDATE {tn} SET {role} = "", {city} = "", {ballroom_level} = "", ' \
+                    '{latin_level} = "" WHERE {role} = ?' \
+                .format(tn=ref_partner_list,
+                        role=sql_follow, city=sql_city_follow,
+                        ballroom_level=sql_ballroom_level_follow, latin_level=sql_latin_level_follow)
+            cursor.execute(query, (identifier,))
+        connection.commit()
+        query = 'SELECT * FROM {tn} WHERE {num} = ?'.format(tn=ref_partner_list, num=sql_no)
+        couple = cursor.execute(query, (couple_id,)).fetchall()
+        couple = couple[0]
+        if couple[partner_dict[sql_lead]] == '' and couple[partner_dict[sql_follow]] == '':
+            query = 'DELETE FROM {tn} WHERE {num} = ?'.format(tn=ref_partner_list, num=sql_no)
+            cursor.execute(query, (couple_id,))
+            connection.commit()
+        query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE {id} = ?;'\
+            .format(tn1=selection_list, tn2=signup_list, id=sql_id)
         cursor.execute(query, (identifier,))
-        query = 'DELETE FROM {tn} WHERE id = ?'.format(tn=selected_list)
+        query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=selected_list, id=sql_id)
         cursor.execute(query, (identifier,))
         connection.commit()
         status_print('Removed {} from the NTDS'.format(identifier))
@@ -615,13 +674,13 @@ def max_rc(direction, worksheet):
 def create_tables(connection, cursor):
     """"Drops existing tables and creates new ones"""
     # Drop all existing tables (from previous run)
-    tables_to_drop = [signup_list, selection_list, selected_list, team_list, partners_list, ref_partner_list,
-                      fixed_beginners_list, fixed_lions_list]
+    tables_to_drop = [signup_list, selection_list, selected_list, canceled_list, backup_list,
+                      team_list, partners_list, ref_partner_list, fixed_beginners_list, fixed_lions_list]
     for item in tables_to_drop:
         query = drop_table_query.format(item)
         cursor.execute(query)
     # Create new tables
-    dancer_list_tables = [signup_list, selection_list, selected_list]
+    dancer_list_tables = [signup_list, selection_list, selected_list, canceled_list, backup_list]
     for item in dancer_list_tables:
         query = dancers_list_query.format(item)
         cursor.execute(query)
@@ -721,13 +780,19 @@ def print_ntds_config():
 
 def welcome_text():
     """"Text displayed when opening the program for the first time."""
+    status_text.config(state=NORMAL)
+    status_text.config(wrap=WORD)
+    status_text.config(state=DISABLED)
     status_print('Welcome to the NTDS Selection!')
     status_print('')
     status_print('You can start a new selection, update an existing selection, '
-                 'or change the options with the buttons in the bottom right corner.')
+                 'or change the settings with the buttons in the bottom right corner.')
     status_print('')
     status_print('For an overview of the available commands, type "help" in the command prompt.')
     status_print('')
+    status_text.config(state=NORMAL)
+    status_text.config(wrap=NONE)
+    status_text.config(state=DISABLED)
     data_text.config(state=NORMAL)
     data_text.delete('1.0', END)
     data_text.insert(END, 'Data about the number of contestants, First Aid Officers, required sleeping locations, etc. '
@@ -735,21 +800,22 @@ def welcome_text():
     data_text.config(state=DISABLED)
     help_text.config(state=NORMAL)
     help_text.delete('1.0', END)
-    help_text.insert(END, 'Some helpful commands are:\n')
-    help_text.insert(END, 'list_available:\n')
-    help_text.insert(END, 'Lists all dancers available for selection.\n')
-    help_text.insert(END, 'list_level: {level=beginners/breiten/open}\n')
-    help_text.insert(END, 'Lists all dancers of the given level that are available for selection.\n')
-    # help_text.insert(END, 'list_fa:\n')
-    # help_text.insert(END, 'Lists all dancers available for selection that are a qualified First Aid Officer.\n')
-    # help_text.insert(END, 'list_ero:\n')
-    # help_text.insert(END, 'Lists all dancers available for selection that are a qualified Emergency Response Officer.\n')
-    help_text.insert(END, '-add n:\n')
-    help_text.insert(END, 'Selects contestant number "n" for the NTDS.\n')
-    help_text.insert(END, '-addp n:\n')
-    help_text.insert(END, 'Selects contestant number "n" (and a potential partner) for the NTDS.\n')
-    help_text.insert(END, '-remove n:\n')
-    help_text.insert(END, 'Removes contestant number "n" from the selected contestants.\n')
+    help_text.insert(END, 'Some helpful commands are:'+'\n')
+    help_text.insert(END, 'help:'+'\n')
+    help_text.insert(END, 'Gives a list of all commands.'+'\n')
+    help_text.insert(END, 'list_available:'+'\n')
+    help_text.insert(END, 'Lists all dancers available for selection.'+'\n')
+    help_text.insert(END, 'list_level: {level=beginners/breiten/open}'+'\n')
+    help_text.insert(END, 'Lists all dancers of the given level that are available for selection.'+'\n')
+    help_text.insert(END, '-add n:'+'\n')
+    help_text.insert(END, 'Selects contestant number "n" (and their signed partner) for the NTDS.'+'\n')
+    help_text.insert(END, '-addp n:'+'\n')
+    help_text.insert(END, 'Selects contestant number "n", and a (virtual) partner for the NTDS.'+'\n')
+    help_text.insert(END, '-remove n:'+'\n')
+    help_text.insert(END, 'Removes contestant number "n" from the selected contestants.'+'\n')
+    help_text.insert(END, '-removep n:'+'\n')
+    help_text.insert(END, 'Removes contestant number "n", '
+                          'and their (virtual) partner from the selected contestants.'+'\n')
     help_text.config(state=DISABLED)
 
 
@@ -777,13 +843,16 @@ def command_help_text():
     status_print('Lists all dancers with at least one level Open Class available for selection.')
     status_print('')
     status_print('-add n')
-    status_print('Selects contestant number "n" for the NTDS.')
+    status_print('Selects contestant number "n" (and their signed partner) for the NTDS.')
     status_print('')
     status_print('-addp n')
-    status_print('Selects contestant number "n" (and a potential partner) for the NTDS.')
+    status_print('Selects contestant number "n", and a (virtual) partner for the NTDS.')
     status_print('')
     status_print('-remove n')
     status_print('Removes contestant number "n" from the selected contestants.')
+    status_print('')
+    status_print('-removep n')
+    status_print('Removes contestant number "n", and their (virtual) partner from the selected contestants.')
     status_print('')
     status_print('print_contestants')
     status_print('Prints a list of how much contestants each city has had selected. ')
@@ -796,9 +865,11 @@ def command_help_text():
     status_print('')
 
 
-def status_print(status_message):
+def status_print(status_message, wrap=True):
     """"Temp"""
     status_text.config(state=NORMAL)
+    if wrap is True:
+        status_message = textwrap.fill(status_message, status_text_width)
     status_text.insert(END, status_message)
     status_text.insert(END, '\n')
     status_text.update()
@@ -833,64 +904,67 @@ def print_table(table):
                           'Ballroom mandatory blind date', 'Latin mandatory blind date',
                           'First Aid', 'Emergency Response Officer', 'Ballroom jury', 'Latin jury',
                           'Student', 'Sleeping location', 'Volunteer', 'Past volunteer', 'Team']
-    status_print(tabulate(formatted_table, headers=print_table_header, tablefmt='grid'))
+    status_print(tabulate(formatted_table, headers=print_table_header, tablefmt='grid'), wrap=False)
 
 
-def status_update(cursor):
+def status_update():
     """"Temp"""
+    status_connection = sql.connect(database_key['path'])
+    status_cursor = status_connection.cursor()
     query = 'SELECT * FROM {tn}'.format(tn=selected_list)
-    number_of_contestants = len(cursor.execute(query).fetchall())
+    number_of_contestants = len(status_cursor.execute(query).fetchall())
     query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {ballroom_role} = ?'\
         .format(tn=selected_list, ballroom_level=sql_ballroom_level, ballroom_role=sql_ballroom_role)
-    number_of_beginner_ballroom_leads = len(cursor.execute(query, (beginner, lead)).fetchall())
-    number_of_breiten_ballroom_leads = len(cursor.execute(query, (breiten, lead)).fetchall())
-    number_of_open_ballroom_leads = len(cursor.execute(query, (open_class, lead)).fetchall())
-    number_of_beginner_ballroom_follows = len(cursor.execute(query, (beginner, follow)).fetchall())
-    number_of_breiten_ballroom_follows = len(cursor.execute(query, (breiten, follow)).fetchall())
-    number_of_open_ballroom_follows = len(cursor.execute(query, (open_class, follow)).fetchall())
+    number_of_beginner_ballroom_leads = len(status_cursor.execute(query, (beginner, lead)).fetchall())
+    number_of_breiten_ballroom_leads = len(status_cursor.execute(query, (breiten, lead)).fetchall())
+    number_of_open_ballroom_leads = len(status_cursor.execute(query, (open_class, lead)).fetchall())
+    number_of_beginner_ballroom_follows = len(status_cursor.execute(query, (beginner, follow)).fetchall())
+    number_of_breiten_ballroom_follows = len(status_cursor.execute(query, (breiten, follow)).fetchall())
+    number_of_open_ballroom_follows = len(status_cursor.execute(query, (open_class, follow)).fetchall())
     query = 'SELECT * FROM {tn} WHERE {latin_level} = ? AND {latin_role} = ?' \
         .format(tn=selected_list, latin_level=sql_latin_level, latin_role=sql_latin_role)
-    number_of_beginner_latin_leads = len(cursor.execute(query, (beginner, lead)).fetchall())
-    number_of_breiten_latin_leads = len(cursor.execute(query, (breiten, lead)).fetchall())
-    number_of_open_latin_leads = len(cursor.execute(query, (open_class, lead)).fetchall())
-    number_of_beginner_latin_follows = len(cursor.execute(query, (beginner, follow)).fetchall())
-    number_of_breiten_latin_follows = len(cursor.execute(query, (breiten, follow)).fetchall())
-    number_of_open_latin_follows = len(cursor.execute(query, (open_class, follow)).fetchall())
+    number_of_beginner_latin_leads = len(status_cursor.execute(query, (beginner, lead)).fetchall())
+    number_of_breiten_latin_leads = len(status_cursor.execute(query, (breiten, lead)).fetchall())
+    number_of_open_latin_leads = len(status_cursor.execute(query, (open_class, lead)).fetchall())
+    number_of_beginner_latin_follows = len(status_cursor.execute(query, (beginner, follow)).fetchall())
+    number_of_breiten_latin_follows = len(status_cursor.execute(query, (breiten, follow)).fetchall())
+    number_of_open_latin_follows = len(status_cursor.execute(query, (open_class, follow)).fetchall())
     query = 'SELECT * FROM {tn} WHERE {first_aid} = ?'.format(tn=selected_list, first_aid=sql_first_aid)
-    number_of_first_aid_yes = len(cursor.execute(query, (NTDS_options['first_aid']['yes'],)).fetchall())
-    number_of_first_aid_maybe = len(cursor.execute(query, (NTDS_options['first_aid']['maybe'],)).fetchall())
+    number_of_first_aid_yes = len(status_cursor.execute(query, (NTDS_options['first_aid']['yes'],)).fetchall())
+    number_of_first_aid_maybe = len(status_cursor.execute(query, (NTDS_options['first_aid']['maybe'],)).fetchall())
     query = 'SELECT * FROM {tn} WHERE {first_aid} = ?'\
         .format(tn=selected_list, first_aid=sql_emergency_response_officer)
     number_of_emergency_response_officer_yes = \
-        len(cursor.execute(query, (NTDS_options['emergency_response_officer']['yes'],)).fetchall())
+        len(status_cursor.execute(query, (NTDS_options['emergency_response_officer']['yes'],)).fetchall())
     number_of_emergency_response_officer_maybe = \
-        len(cursor.execute(query, (NTDS_options['emergency_response_officer']['maybe'],)).fetchall())
+        len(status_cursor.execute(query, (NTDS_options['emergency_response_officer']['maybe'],)).fetchall())
     query = 'SELECT * FROM {tn} WHERE ballroom_level = ? AND ballroom_mandatory_blind_date = ?' \
         .format(tn=selected_list, ballroom_level=sql_ballroom_level,
                 ballroom_mandatory_blind_date=sql_ballroom_mandatory_blind_date)
-    number_of_mandatory_breiten_ballroom_blind_daters = len(cursor.execute(query, (breiten, yes)).fetchall())
+    number_of_mandatory_breiten_ballroom_blind_daters = len(status_cursor.execute(query, (breiten, yes)).fetchall())
     query = 'SELECT * FROM {tn} WHERE latin_level = ? AND latin_mandatory_blind_date = ?' \
         .format(tn=selected_list, latin_level=sql_latin_level,
                 latin_mandatory_blind_date=sql_latin_mandatory_blind_date)
-    number_of_mandatory_breiten_latin_blind_daters = len(cursor.execute(query, (breiten, yes)).fetchall())
+    number_of_mandatory_breiten_latin_blind_daters = len(status_cursor.execute(query, (breiten, yes)).fetchall())
     query = 'SELECT * FROM {tn} WHERE {ballroom_jury} = ?'.format(tn=selected_list, ballroom_jury=sql_ballroom_jury)
-    number_of_ballroom_jury_yes = len(cursor.execute(query, (NTDS_options['ballroom_jury']['yes'],)).fetchall())
-    number_of_ballroom_jury_maybe = len(cursor.execute(query, (NTDS_options['ballroom_jury']['maybe'],)).fetchall())
+    number_of_ballroom_jury_yes = len(status_cursor.execute(query, (NTDS_options['ballroom_jury']['yes'],)).fetchall())
+    number_of_ballroom_jury_maybe = len(status_cursor.execute(query, (NTDS_options['ballroom_jury']['maybe'],))
+                                        .fetchall())
     query = 'SELECT * FROM {tn} WHERE {latin_jury} = ?'.format(tn=selected_list, latin_jury=sql_latin_jury)
-    number_of_latin_jury_yes = len(cursor.execute(query, (NTDS_options['latin_jury']['yes'],)).fetchall())
-    number_of_latin_jury_maybe = len(cursor.execute(query, (NTDS_options['latin_jury']['maybe'],)).fetchall())
+    number_of_latin_jury_yes = len(status_cursor.execute(query, (NTDS_options['latin_jury']['yes'],)).fetchall())
+    number_of_latin_jury_maybe = len(status_cursor.execute(query, (NTDS_options['latin_jury']['maybe'],)).fetchall())
     query = 'SELECT * FROM {tn} WHERE {current_volunteer} = ?'\
         .format(tn=selected_list, current_volunteer=sql_current_volunteer)
     number_of_current_volunteer_yes = \
-        len(cursor.execute(query, (NTDS_options['current_volunteer']['yes'],)).fetchall())
+        len(status_cursor.execute(query, (NTDS_options['current_volunteer']['yes'],)).fetchall())
     number_of_current_volunteer_maybe = \
-        len(cursor.execute(query, (NTDS_options['current_volunteer']['maybe'],)).fetchall())
+        len(status_cursor.execute(query, (NTDS_options['current_volunteer']['maybe'],)).fetchall())
     query = 'SELECT * FROM {tn} WHERE {past_volunteer} = ?'\
         .format(tn=selected_list, past_volunteer=sql_previous_volunteer)
-    number_of_past_volunteer = len(cursor.execute(query, (NTDS_options['past_volunteer']['yes'],)).fetchall())
+    number_of_past_volunteer = len(status_cursor.execute(query, (NTDS_options['past_volunteer']['yes'],)).fetchall())
     query = 'SELECT * FROM {tn} WHERE {sleeping_location} = ?' \
         .format(tn=selected_list, sleeping_location=sql_sleeping_location)
-    number_of_sleeping_spots = len(cursor.execute(query, (NTDS_options['sleeping_location']['yes'],)).fetchall())
+    number_of_sleeping_spots = len(status_cursor.execute(query, (NTDS_options['sleeping_location']['yes'],)).fetchall())
     data_text.config(state=NORMAL)
     data_text.delete('1.0', END)
     data_text.insert(END, 'Selected database name: {name}\n'.format(name=database_key['path']))
@@ -935,13 +1009,18 @@ def status_update(cursor):
     data_text.insert(END, 'Sleeping spots: {yes}'.format(yes=number_of_sleeping_spots))
     data_text.see(END)
     data_text.config(state=DISABLED)
+    status_cursor.close()
+    status_connection.close()
 
 
-def select_database():
+def select_database(entry=None):
     """"Temp"""
     old_database_name = database_key['db']
-    ask_database = entrybox('Please give the database name', (database_key, 'db'))
-    root.wait_window(ask_database.top)
+    if entry is None:
+        ask_database = entrybox('Please give the database name', (database_key, 'db'))
+        root.wait_window(ask_database.top)
+    else:
+        database_key['db'] = entry
     database_key['path'] = database_key['db'] + db_ext
     if os.path.isfile(path=database_key['path']) is True and old_database_name != database_key['db']:
         status_text.config(state=NORMAL)
@@ -953,7 +1032,7 @@ def select_database():
         cli_text.focus_set()
         sel_conn = sql.connect(database_key['path'])
         sel_curs = sel_conn.cursor()
-        status_update(cursor=sel_curs)
+        status_update()
         sel_curs.close()
         sel_conn.close()
     elif os.path.isfile(path=database_key['path']) is False or old_database_name != database_key['db']:
@@ -965,22 +1044,28 @@ def options_menu():
     status_print('Work in progress...')
 
 
-def cli_parser(*args):
+def cli_parser(event):
     """"Temp"""
-    wip = 'Work in progress...'
+    # wip = 'Work in progress...'
+    user_input = ''
     command = cli_text.get()
     cli_text.delete(0, END)
     connection = sql.connect(database_key['path'])
     cli_curs = connection.cursor()
-    open_commands = ['echo', 'help']
-    db_commands = ['list_available', 'list_beginners', 'list_breiten', 'list_open',
+    open_commands = ['echo', 'help',
+                     '-db']
+    db_commands = ['-add', '-addp', '-remove', '-removep',
+                   'list_available', 'list_beginners', 'list_breiten', 'list_open',
                    'list_fa', 'list_ero', 'list_ballroom_jury', 'list_latin_jury',
-                   'print_contestants',
+                   'print_contestants', 'print_breakdown',
                    'finish_selection', 'export']
-    if (command in db_commands or command.startswith('-')) and os.path.isfile(database_key['path']) is True:
-        if command.startswith('-add '):
-            command = command[5:]
-            selected_id = int(command)
+    if command.startswith('-'):
+        command = command.split(' ', 1)
+        user_input = command[1]
+        command = command[0]
+    if command in db_commands and os.path.isfile(database_key['path']) is True:
+        if command == '-add':
+            selected_id = int(user_input)
             query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_id)
             dancer = cli_curs.execute(query, (selected_id,)).fetchone()
             ballroom_partner = dancer[gen_dict[sql_ballroom_partner]]
@@ -992,20 +1077,43 @@ def cli_parser(*args):
                 move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
                 move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
             else:
+                status_print('Selecting dancer number {num} on his/her own'.format(num=selected_id))
+                create_pair(selected_id, '', connection=connection, cursor=cli_curs)
                 move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
-        elif command.startswith('-addp '):
-            command = command[6:]
-            selected_id = int(command)
+        elif command == '-addp':
+            selected_id = int(user_input)
             partner_id = find_partner(selected_id, connection=connection, cursor=cli_curs)
             create_pair(selected_id, partner_id, connection=connection, cursor=cli_curs)
             move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
             move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
-        elif command.startswith('-remove '):
-            command = command[8:]
-            selected_id = int(command)
+        elif command == '-remove':
+            selected_id = int(user_input)
             remove_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+        elif command == '-removep':
+            selected_id = int(user_input)
+            partner_id = ''
+            query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_lead)
+            couple = cli_curs.execute(query, (selected_id,)).fetchall()
+            role = ''
+            if len(couple) == 0:
+                query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_follow)
+                couple = cli_curs.execute(query, (selected_id,)).fetchall()
+                if len(couple) != 0:
+                    role = roles['f']
+            elif len(couple) != 0:
+                role = roles['l']
+            couple = couple[0]
+            if role == roles['l']:
+                partner_id = couple[partner_dict[sql_follow]]
+            elif role == roles['f']:
+                partner_id = couple[partner_dict[sql_lead]]
+            if partner_id != '':
+                status_print('Removing dancers number {sel} and {par} from the NTDS.'
+                             .format(sel=selected_id, par=partner_id))
+            remove_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+            remove_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
         elif command == 'list_available':
-            query = 'SELECT * FROM {tn}'.format(tn=selection_list)
+            query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=selection_list, id=sql_id)
             available_contestants = cli_curs.execute(query).fetchall()
             if len(available_contestants) > 0:
                 status_print('')
@@ -1018,8 +1126,8 @@ def cli_parser(*args):
                 status_print('There are no contestants available for selection for the NTDS')
                 status_print('')
         elif command == 'list_beginners':
-            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? or {latin_level} = ?'\
-                .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level)
+            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? or {latin_level} = ? ORDER BY {id}'\
+                .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level, id=sql_id)
             available_contestants = cli_curs.execute(query, (beginner, beginner)).fetchall()
             if len(available_contestants) > 0:
                 status_print('')
@@ -1032,8 +1140,8 @@ def cli_parser(*args):
                 status_print('There are no {lvl} dancers available for selection for the NTDS'.format(lvl=beginner))
                 status_print('')
         elif command == 'list_breiten':
-            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? or {latin_level} = ?' \
-                .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level)
+            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? or {latin_level} = ? ORDER BY {id}' \
+                .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level, id=sql_id)
             available_contestants = cli_curs.execute(query, (breiten, breiten)).fetchall()
             if len(available_contestants) > 0:
                 status_print('')
@@ -1046,8 +1154,8 @@ def cli_parser(*args):
                 status_print('There are no {lvl} dancers available for selection for the NTDS'.format(lvl=breiten))
                 status_print('')
         elif command == 'list_open':
-            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? or {latin_level} = ?' \
-                .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level)
+            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? or {latin_level} = ? ORDER BY {id}' \
+                .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level, id=sql_id)
             available_contestants = cli_curs. execute(query, (open_class, open_class)).fetchall()
             if len(available_contestants) > 0:
                 status_print('')
@@ -1060,7 +1168,8 @@ def cli_parser(*args):
                 status_print('There are no {lvl} dancers available for selection for the NTDS'.format(lvl=open_class))
                 status_print('')
         elif command == 'list_fa':
-            query = 'SELECT * FROM {tn} WHERE {first_aid} = ?'.format(tn=selection_list, first_aid=sql_first_aid)
+            query = 'SELECT * FROM {tn} WHERE {first_aid} = ? ORDER BY {id}'\
+                .format(tn=selection_list, first_aid=sql_first_aid, id=sql_id)
             available_contestants = cli_curs.execute(query, (NTDS_options['first_aid']['maybe'],)).fetchall()
             if len(available_contestants) > 0:
                 status_print('')
@@ -1079,7 +1188,8 @@ def cli_parser(*args):
                 status_print('There are no volunteers available for selection that are a qualified First Aid Officer')
                 status_print('')
         elif command == 'list_ero':
-            query = 'SELECT * FROM {tn} WHERE {ero} = ?'.format(tn=selection_list, ero=sql_emergency_response_officer)
+            query = 'SELECT * FROM {tn} WHERE {ero} = ? ORDER BY {id}'\
+                .format(tn=selection_list, ero=sql_emergency_response_officer, id=sql_id)
             available_contestants = cli_curs.execute(query, (NTDS_options['emergency_response_officer']['maybe'],))\
                 .fetchall()
             if len(available_contestants) > 0:
@@ -1101,8 +1211,8 @@ def cli_parser(*args):
                              'Emergency Response Officer')
                 status_print('')
         elif command == 'list_ballroom_jury':
-            query = 'SELECT * FROM {tn} WHERE {ballroom_jury} = ?'\
-                .format(tn=selection_list, ballroom_jury=sql_ballroom_jury)
+            query = 'SELECT * FROM {tn} WHERE {ballroom_jury} = ? ORDER BY {id}'\
+                .format(tn=selection_list, ballroom_jury=sql_ballroom_jury, id=sql_id)
             available_contestants = cli_curs.execute(query, (NTDS_options['ballroom_jury']['maybe'],))\
                 .fetchall()
             if len(available_contestants) > 0:
@@ -1123,8 +1233,8 @@ def cli_parser(*args):
                 status_print('There are no volunteers available for selection that want to volunteer as Ballroom Jury.')
                 status_print('')
         elif command == 'list_latin_jury':
-            query = 'SELECT * FROM {tn} WHERE {latin_jury} = ?'\
-                .format(tn=selection_list, latin_jury=sql_latin_jury)
+            query = 'SELECT * FROM {tn} WHERE {latin_jury} = ? ORDER BY {id}'\
+                .format(tn=selection_list, latin_jury=sql_latin_jury, id=sql_id)
             available_contestants = cli_curs.execute(query, (NTDS_options['latin_jury']['maybe'],))\
                 .fetchall()
             if len(available_contestants) > 0:
@@ -1149,33 +1259,126 @@ def cli_parser(*args):
             status_print('Finishing the selection for the NTDS automatically')
             select_bulk(max_contestants-1, connection=connection, cursor=cli_curs)
             # TODO add smart system to fill in gaps
-            # query = 'SELECT * FROM {tn}'.format(tn=selected_list)
-            # number_of_selected_dancers = len(cli_curs.execute(query).fetchall())
-            # if number_of_selected_dancers < max_contestants:
-            #     select_bulk(max_contestants, connection=connection, cursor=cli_curs, no_partner=True)
+            query = 'SELECT * FROM {tn}'.format(tn=selected_list)
+            number_of_selected_dancers = len(cli_curs.execute(query).fetchall())
+            if number_of_selected_dancers < max_contestants:
+                select_bulk(max_contestants, connection=connection, cursor=cli_curs, no_partner=True)
         elif command == 'print_contestants':
             status_print('')
             collect_city_overview(source_table=selected_list, target_table=contestants_list, users=contestants,
                                   cursor=cli_curs, connection=connection)
+        elif command == 'print_breakdown':
+            print_dict = {sql_ballroom_level: 'Ballroom', sql_latin_level: 'Latin'}
+            query = 'SELECT {city}, COUNT() FROM {tn} GROUP BY {city}'.format(tn=selected_list, city=sql_city)
+            ordered_cities = cli_curs.execute(query, ()).fetchall()
+            query_entries = [[sql_ballroom_level, beginner], [sql_latin_level, beginner],
+                             [sql_ballroom_level, breiten], [sql_latin_level, breiten],
+                             [sql_ballroom_level, open_class], [sql_latin_level, open_class]]
+            for city in ordered_cities:
+                city = city[0]
+                query = 'SELECT * FROM {tn} WHERE {city} = ?'.format(tn=selected_list, city=sql_city)
+                number_of_selected_city_dancers = len(cli_curs.execute(query, (city,)).fetchall())
+                status_print('')
+                status_print('Breakdown of the number of selected dancers from {city}:'.format(city=city))
+                status_print('Total dancers selected:\t\t {num}'.format(num=number_of_selected_city_dancers))
+                for entries in query_entries:
+                    query = 'SELECT * FROM {tn} WHERE {temp} = ? AND {city} = ?' \
+                        .format(tn=selected_list, city=sql_city, temp={})
+                    query = query.format(entries[0])
+                    number_of_selected_city_dancers = len(cli_curs.execute(query, (entries[1], city)).fetchall())
+                    status_print('{level}, {division}:\t\t {num}'
+                                 .format(division=print_dict[entries[0]], level=entries[1],
+                                         num=number_of_selected_city_dancers))
         elif command == 'export':
-            # otp = selection.replace(".", ("_" + str(time.time()) + "."))
-            # wb = openpyxl.Workbook()
-            # wb.save(otp)
-            status_print(wip)
-    elif command in open_commands:
+            save_time = str(round(time.time()))
+            # Export database (make copy)
+            output_db = output_key['path'].replace('.xlsx', ('_' + save_time + db_ext))
+            status_print('')
+            status_print('Exporting database')
+            status_print('Saving output: "{file}"'.format(file=output_db))
+            shutil.copy2(database_key['path'], output_db)
+            # Export overview file
+            output_file = output_key['path'].replace('.', ('_' + save_time + '_Overview' + '.'))
+            status_print('')
+            status_print('Exporting all selected dancers')
+            workbook = openpyxl.Workbook()
+            worksheet = workbook.worksheets[0]
+            worksheet.title = 'Selected'
+            output_data = list()
+            output_data.append(output_title)
+            query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=selected_list, id=sql_id)
+            selected_dancers = cli_curs.execute(query).fetchall()
+            output_data.extend(selected_dancers)
+            for row in range(len(output_data)):
+                for column in range(len(output_title)):
+                    cell = worksheet.cell(row=row+1, column=column+1)
+                    cell.value = output_data[row][column]
+            workbook.save(output_file)
+            status_print('Exporting all dancers on the waiting list')
+            worksheet = workbook.create_sheet('Waiting list')
+            output_data = list()
+            output_data.append(output_title)
+            query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=selection_list, id=sql_id)
+            waiting_dancers = cli_curs.execute(query).fetchall()
+            output_data.extend(waiting_dancers)
+            for row in range(len(output_data)):
+                for column in range(len(output_title)):
+                    cell = worksheet.cell(row=row+1, column=column+1)
+                    cell.value = output_data[row][column]
+            status_print('Saving output: "{file}"'.format(file=output_file))
+            status_print('')
+            workbook.save(output_file)
+            # Export overview file for all cities
+            query = 'SELECT {city} FROM {tn} ORDER BY {city}'.format(tn=team_list, city=sql_city)
+            all_cities = cli_curs.execute(query).fetchall()
+            for city in all_cities:
+                city = city[0]
+                output_file = output_key['path'].replace('.', ('_' + save_time + '_' + city + '.'))
+                status_print('Exporting selected dancers for {city}'.format(city=city))
+                workbook = openpyxl.Workbook()
+                worksheet = workbook.worksheets[0]
+                worksheet.title = 'Selected'
+                output_data = list()
+                output_data.append(output_title)
+                query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=selected_list, id=sql_id)
+                selected_dancers = cli_curs.execute(query).fetchall()
+                output_data.extend(selected_dancers)
+                for row in range(len(output_data)):
+                    for column in range(len(output_title)):
+                        cell = worksheet.cell(row=row + 1, column=column + 1)
+                        cell.value = output_data[row][column]
+                workbook.save(output_file)
+                status_print('Exporting dancers on the waiting list for {city}'.format(city=city))
+                worksheet = workbook.create_sheet('Waiting list')
+                output_data = list()
+                output_data.append(output_title)
+                query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=selection_list, id=sql_id)
+                waiting_dancers = cli_curs.execute(query).fetchall()
+                output_data.extend(waiting_dancers)
+                for row in range(len(output_data)):
+                    for column in range(len(output_title)):
+                        cell = worksheet.cell(row=row + 1, column=column + 1)
+                        cell.value = output_data[row][column]
+                status_print('Saving output: "{file}"'.format(file=output_file))
+                status_print('')
+                workbook.save(output_file)
+    if command in open_commands:
         if command == 'echo':
             status_print(command)
         elif command == 'help':
             command_help_text()
-    elif command != '':
-        if os.path.isfile(database_key['path']) is False:
-            status_print('Command not available, no open database')
-        else:
-            status_print('Unknown command: "{command}"'.format(command=command))
+        elif command == '-db':
+            selected_db = str(user_input)
+            select_database(entry=selected_db)
+    if command != '' and command not in open_commands and command not in db_commands:
+        status_print('Unknown command: "{command}"'.format(command=command))
+    elif command in db_commands and os.path.isfile(database_key['path']) is False:
+        status_print('Command not available, no open database')
     if os.path.isfile(database_key['path']) is True:
-        status_update(cursor=cli_curs)
+        status_update()
     cli_curs.close()
     connection.close()
+    return event
 
 
 def main_selection():
@@ -1183,7 +1386,7 @@ def main_selection():
     # Extract data from sign-up sheets
     ####################################################################################################################
     start_time = time.time()
-    timestamp = start_time
+    # timestamp = start_time
     # Connect to database and create a cursor
     status_print('')
     status_print('Creating new database...')
@@ -1462,14 +1665,14 @@ def main_selection():
             curs.execute(query, (dancer_selected, this_run))
         conn.commit()
     # Update status
-    status_update(cursor=curs)
+    status_update()
     # Close cursor and connection
     curs.close()
     conn.close()
 
 if __name__ == "__main__":
     root = Tk()
-    root.geometry("1820x900")
+    root.geometry("1600x900")
     root.state('zoomed')
     root.title('NTDS 2018 Selection (alpha)')
     pad_out = 8
@@ -1477,16 +1680,19 @@ if __name__ == "__main__":
     frame = Frame()
     frame.place(in_=root, anchor="c", relx=.50, rely=.50)
     x_scrollbar = Scrollbar(master=frame, orient=HORIZONTAL)
-    x_scrollbar.grid(row=2, column=0, padx=pad_in, sticky=E+W)
-    status_text = Text(master=frame, width=148, height=50, padx=pad_in, pady=pad_in,
-                       xscrollcommand=x_scrollbar, yscrollcommand=True, state=DISABLED, wrap=NONE)
-    status_text.grid(row=0, column=0, padx=pad_out, rowspan=2)
+    x_scrollbar.grid(row=1, column=0, padx=pad_in, sticky=E+W)
+    y_scrollbar = Scrollbar(master=frame, orient=VERTICAL)
+    y_scrollbar.grid(row=0, column=1, pady=pad_in, sticky=N+S)
+    status_text = Text(master=frame, width=status_text_width, height=50, padx=pad_in, pady=pad_in,
+                       xscrollcommand=x_scrollbar.set, yscrollcommand=y_scrollbar.set, state=DISABLED, wrap=NONE)
+    status_text.grid(row=0, column=0, padx=pad_out)
     x_scrollbar.config(command=status_text.xview)
-    cli_text = Entry(master=frame, width=200)
-    cli_text.grid(row=3, column=0, padx=pad_in, pady=pad_out)
+    y_scrollbar.config(command=status_text.yview)
+    cli_text = Entry(master=frame, width=162)
+    cli_text.grid(row=2, column=0, padx=pad_in, pady=pad_out)
     cli_text.bind('<Return> ', cli_parser)
     data_help_frame = Frame(master=frame)
-    data_help_frame.grid(row=0, column=1, rowspan=4, columnspan=3)
+    data_help_frame.grid(row=0, column=2, rowspan=4, columnspan=3)
     data_text = Text(master=data_help_frame, width=70, height=32, padx=pad_in, pady=pad_in, wrap=WORD, state=DISABLED)
     data_text.grid(row=0, column=0, padx=pad_out, columnspan=3)
     padding_frame = Frame(master=data_help_frame, height=16)
@@ -1497,7 +1703,7 @@ if __name__ == "__main__":
     start_button.grid(row=3, column=0, padx=pad_out, pady=pad_in)
     update_button = Button(master=data_help_frame, text='Select existing database', command=select_database)
     update_button.grid(row=3, column=1, padx=pad_out)
-    options_button = Button(master=data_help_frame, text='Options', command=options_menu)
+    options_button = Button(master=data_help_frame, text='Settings', command=options_menu)
     options_button.grid(row=3, column=2, padx=pad_out)
     welcome_text()
     print_ntds_config()
