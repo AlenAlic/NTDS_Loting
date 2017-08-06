@@ -1,7 +1,7 @@
 import tkinter
 
 
-class EntryBox(object):
+class SettingsWindow(object):
 
     root = None
 
@@ -12,7 +12,7 @@ class EntryBox(object):
         (providing a sequence for dict_key creates an entry for user input)
         """
         tki = tkinter
-        self.top = tki.Toplevel(EntryBox.root)
+        self.top = tki.Toplevel(SettingsWindow.root)
 
         frm = tki.Frame(self.top)
         frm.pack(fill='both', expand=True)
