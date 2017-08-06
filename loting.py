@@ -11,6 +11,7 @@ from tabulate import tabulate
 # logger.setLevel(logging.DEBUG)
 # logger.addHandler(logging.StreamHandler())
 from tkinter import *
+from tkinter import messagebox
 from classes.entrybox import EntryBox
 import os.path
 import configparser
@@ -55,6 +56,7 @@ output_key['path'] = os.path.join(output_key['path'], output_key['name'])
 # TODO rework counting lions, error in counting (it accidentally counts non lion contestants matched with a
 # lion contestant. rework update_city_lions function
 # TODO refactor (remove hardcoded material that snuck in)
+# TODO add additional teams without crashing the system
 
 # Boundaries
 user_boundaries = False
@@ -91,6 +93,7 @@ if os.path.isfile(path=settings_key['path']):
                 classes.append(levels[dancing_class])
 
 # Roles
+# TODO remove lead/follow from program
 roles = {'lead': 'Lead', 'follow': 'Follow', 0: ''}
 if os.path.isfile(path=config_key['path']):
     config_parser.read(config_key['path'])
@@ -144,7 +147,7 @@ while True:
 
 # Table names
 signup_list = 'signup_list'
-canceled_list = 'canceled_list'
+cancelled_list = 'cancelled_list'
 selection_list = 'selection_list'
 selected_list = 'selected_list'
 backup_list = 'backup_list'
@@ -581,19 +584,19 @@ def remove_selected_contestant(identifier, connection, cursor):
             query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_follow)
             couple = cursor.execute(query, (identifier,)).fetchall()
             if len(couple) != 0:
-                role = roles['f']
+                role = roles['follow']
         elif len(couple) != 0:
-            role = roles['l']
+            role = roles['lead']
         couple = couple[0]
         couple_id = couple[partner_dict[sql_no]]
-        if role == roles['l']:
+        if role == roles['lead']:
             query = 'UPDATE {tn} SET {role} = "", {city} = "", {ballroom_level} = "", ' \
                     '{latin_level} = "" WHERE {role} = ?' \
                 .format(tn=ref_partner_list,
                         role=sql_lead, city=sql_city_lead,
                         ballroom_level=sql_ballroom_level_lead, latin_level=sql_latin_level_lead)
             cursor.execute(query, (identifier,))
-        elif role == roles['f']:
+        elif role == roles['follow']:
             query = 'UPDATE {tn} SET {role} = "", {city} = "", {ballroom_level} = "", ' \
                     '{latin_level} = "" WHERE {role} = ?' \
                 .format(tn=ref_partner_list,
@@ -614,7 +617,34 @@ def remove_selected_contestant(identifier, connection, cursor):
         query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=selected_list, id=sql_id)
         cursor.execute(query, (identifier,))
         connection.commit()
-        status_print('Removed {} from the NTDS'.format(identifier))
+        status_print('Removed {} from the NTDS selection.'.format(identifier))
+
+
+def delete_selected_contestant(identifier, connection, cursor):
+    """"Temp"""
+    if identifier is not None:
+        status_print('Contestant {num} cancelled his/her signup for the NTDS.'.format(num=identifier))
+        remove_selected_contestant(identifier, connection=connection, cursor=cursor)
+        query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=selected_list, id=sql_id)
+        cursor.execute(query, (identifier,))
+        query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=selection_list, id=sql_id)
+        cursor.execute(query, (identifier,))
+        query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE {id} = ?;' \
+            .format(tn1=cancelled_list, tn2=signup_list, id=sql_id)
+        cursor.execute(query, (identifier,))
+        connection.commit()
+
+
+def reinstate_selected_contestant(identifier, connection, cursor):
+    """"Temp"""
+    if identifier is not None:
+        status_print('Put 0contestant {num} back on the list to be eligible for selection.'.format(num=identifier))
+        query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=cancelled_list, id=sql_id)
+        cursor.execute(query, (identifier,))
+        query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE {id} = ?;' \
+            .format(tn1=selection_list, tn2=signup_list, id=sql_id)
+        cursor.execute(query, (identifier,))
+        connection.commit()
 
 
 def create_city_beginners_list(cities_list, connection, cursor):
@@ -701,16 +731,6 @@ def create_city_lions_list(cities_list, connection, cursor):
 
 def update_city_lions(cities_list, connection, cursor):
     """"Temp"""
-    # for city in cities_list:
-    #     query = 'SELECT * FROM {tn} WHERE {city_lead} LIKE ?' \
-    #         .format(tn=partners_list, city_lead=sql_city_lead)
-    #     number_of_city_lions = len(cursor.execute(query, (city,)).fetchall())
-    #     query = 'SELECT * FROM {tn} WHERE {city_follow} LIKE ?' \
-    #         .format(tn=partners_list, city_follow=sql_city_follow)
-    #     number_of_city_lions += len(cursor.execute(query, (city,)).fetchall())
-    #     query = 'UPDATE {tn} SET {num} = ? WHERE {city} = ?' \
-    #         .format(tn=fixed_lions_list, num=sql_num_con, city=sql_city)
-    #     cursor.execute(query, (number_of_city_lions, city))
     for city in cities_list:
         query = 'SELECT * FROM {tn} WHERE {city_lead} = ? '.format(tn=partners_list, city_lead=sql_city_lead)
         sql_filter = []
@@ -768,13 +788,13 @@ def max_rc(direction, worksheet):
 def create_tables(connection, cursor):
     """"Drops existing tables and creates new ones"""
     # Drop all existing tables (from previous run)
-    tables_to_drop = [signup_list, selection_list, selected_list, canceled_list, backup_list,
+    tables_to_drop = [signup_list, selection_list, selected_list, cancelled_list, backup_list,
                       team_list, partners_list, ref_partner_list, fixed_beginners_list, fixed_lions_list]
     for item in tables_to_drop:
         query = drop_table_query.format(item)
         cursor.execute(query)
     # Create new tables
-    dancer_list_tables = [signup_list, selection_list, selected_list, canceled_list, backup_list]
+    dancer_list_tables = [signup_list, selection_list, selected_list, cancelled_list, backup_list]
     for item in dancer_list_tables:
         query = dancers_list_query.format(item)
         cursor.execute(query)
@@ -805,7 +825,8 @@ def create_competing_teams(connection, cursor):
         competing_cities_array.append([team['TeamName'], team['City'], team['SignupSheet']])
     query = 'INSERT INTO {tn} VALUES (?, ?, ?)'.format(tn=team_list)
     for row in competing_cities_array:
-        cursor.execute(query, row)
+        if os.path.isfile(path=row[team_dict[sql_signup_list]]):
+            cursor.execute(query, row)
     connection.commit()
     return competing_cities_array
 
@@ -822,6 +843,7 @@ def reset_selection_tables(connection, cursor):
 
 def collect_city_overview(source_table, target_table, users, cursor, connection):
     """"Temp"""
+    # TODO remove hardcoding c1, c2, etc.
     if source_table == selected_list:
         query = 'SELECT {city}, COUNT() FROM {tn} GROUP BY {city}'.format(tn=source_table, city=sql_city)
     else:
@@ -951,13 +973,13 @@ def welcome_text():
     help_text.insert(END, 'Lists all dancers available for selection.'+'\n')
     help_text.insert(END, 'list_level: {level=beginners/breiten/open}'+'\n')
     help_text.insert(END, 'Lists all dancers of the given level that are available for selection.'+'\n')
-    help_text.insert(END, '-add n:'+'\n')
+    help_text.insert(END, select + ' n:' + '\n')
     help_text.insert(END, 'Selects contestant number "n" (and their signed partner) for the NTDS.'+'\n')
-    help_text.insert(END, '-addp n:'+'\n')
+    help_text.insert(END, selectp + ' n:' + '\n')
     help_text.insert(END, 'Selects contestant number "n", and a (virtual) partner for the NTDS.'+'\n')
-    help_text.insert(END, '-remove n:'+'\n')
+    help_text.insert(END, remove + ' n:' + '\n')
     help_text.insert(END, 'Removes contestant number "n" from the selected contestants.'+'\n')
-    help_text.insert(END, '-removep n:'+'\n')
+    help_text.insert(END, removep + ' n:' + '\n')
     help_text.insert(END, 'Removes contestant number "n", '
                           'and their (virtual) partner from the selected contestants.'+'\n')
     help_text.config(state=DISABLED)
@@ -986,16 +1008,16 @@ def command_help_text():
     status_print('list_open')
     status_print('Lists all dancers with at least one level Open Class available for selection.')
     status_print('')
-    status_print('-add n')
+    status_print(select + ' n')
     status_print('Selects contestant number "n" (and their signed partner) for the NTDS.')
     status_print('')
-    status_print('-addp n')
+    status_print(selectp + ' n')
     status_print('Selects contestant number "n", and a (virtual) partner for the NTDS.')
     status_print('')
-    status_print('-remove n')
+    status_print(remove + ' n')
     status_print('Removes contestant number "n" from the selected contestants.')
     status_print('')
-    status_print('-removep n')
+    status_print(removep + ' n')
     status_print('Removes contestant number "n", and their (virtual) partner from the selected contestants.')
     status_print('')
     status_print('print_contestants')
@@ -1049,6 +1071,7 @@ def print_table(table):
                           'First Aid', 'Emergency Response Officer', 'Ballroom jury', 'Latin jury',
                           'Student', 'Sleeping location', 'Volunteer', 'Past volunteer', 'Team']
     status_print(tabulate(formatted_table, headers=print_table_header, tablefmt='grid'), wrap=False)
+
 
 # TODO add same sex couples to overview
 def status_update():
@@ -1191,6 +1214,29 @@ def options_menu():
     status_print('Work in progress...')
 
 
+# CLI commands
+select = '-select'
+selectp = '-selectp'
+remove = '-remove'
+removep = '-removep'
+delete = '-delete'
+reinstate = '-reinstate'
+list_selected = 'list_selected'
+list_available = 'list_available'
+list_cancelled = 'list_cancelled'
+list_beginners = 'list_beginners'
+list_breiten = 'list_breiten'
+list_open = 'list_open'
+list_fa = 'list_fa'
+list_ero = 'list_ero'
+list_ballroom_jury = 'list_ballroom_jury'
+list_latin_jury = 'list_latin_jury'
+print_contestants = 'print_contestants'
+print_breakdown = 'print_breakdown'
+finish_selection = 'finish_selection'
+export = 'export'
+
+
 def cli_parser(event):
     """"Temp"""
     # wip = 'Work in progress...'
@@ -1201,64 +1247,133 @@ def cli_parser(event):
     cli_curs = connection.cursor()
     open_commands = ['echo', 'help', 'exit',
                      '-stats', '-db']
-    db_commands = ['-add', '-addp', '-remove', '-removep',
-                   'list_available', 'list_beginners', 'list_breiten', 'list_open',
+    db_commands = [select, selectp, remove, removep, delete, reinstate,
+                   'list_selected', 'list_available', 'list_cancelled', 'list_beginners', 'list_breiten', 'list_open',
                    'list_fa', 'list_ero', 'list_ballroom_jury', 'list_latin_jury',
                    'print_contestants', 'print_breakdown',
                    'finish_selection', 'export']
     if command.startswith('-'):
         command = command.split(' ', 1)
-        user_input = command[1]
+        if len(command) > 1:
+            user_input = command[1]
+        else:
+            user_input = ''
         command = command[0]
     if command in db_commands and os.path.isfile(database_key['path']) is True:
-        if command == '-add':
-            selected_id = int(user_input)
-            query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_id)
-            dancer = cli_curs.execute(query, (selected_id,)).fetchone()
-            ballroom_partner = dancer[gen_dict[sql_ballroom_partner]]
-            latin_partner = dancer[gen_dict[sql_latin_partner]]
-            if ballroom_partner != '' or latin_partner != '':
-                status_print('Dancer {num} signed with a partner, selecting both'.format(num=selected_id))
-                partner_id = find_partner(selected_id, connection=connection, cursor=cli_curs, signed_partner_only=True)
-                create_pair(selected_id, partner_id, connection=connection, cursor=cli_curs)
-                move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
-                move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
+        if command == select:
+            try:
+                selected_id = int(user_input)
+                query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_id)
+                dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                if dancer is not None:
+                    ballroom_partner = dancer[gen_dict[sql_ballroom_partner]]
+                    latin_partner = dancer[gen_dict[sql_latin_partner]]
+                    if ballroom_partner != '' or latin_partner != '':
+                        status_print('Dancer {num} signed with a partner, selecting both'.format(num=selected_id))
+                        partner_id = find_partner(selected_id, connection=connection, cursor=cli_curs,
+                                                  signed_partner_only=True)
+                        create_pair(selected_id, partner_id, connection=connection, cursor=cli_curs)
+                        move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                        move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
+                    else:
+                        status_print('Selecting dancer number {num} on his/her own'.format(num=selected_id))
+                        create_pair(selected_id, '', connection=connection, cursor=cli_curs)
+                        move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                else:
+                    status_print('Dancer {num} is not on the selection list, '
+                                 'and can therefor not be selected for the tournament'.format(num=selected_id))
+            except ValueError:
+                status_print('No/Incorrect user number given.')
+        elif command == selectp:
+            try:
+                selected_id = int(user_input)
+                query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_id)
+                dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                if dancer is not None:
+                    partner_id = find_partner(selected_id, connection=connection, cursor=cli_curs)
+                    create_pair(selected_id, partner_id, connection=connection, cursor=cli_curs)
+                    move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                    move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
+                else:
+                    status_print('Dancer {num} is not on the selection list, '
+                                 'and can therefor not be selected for the tournament'.format(num=selected_id))
+            except ValueError:
+                status_print('No/Incorrect user number given.')
+        elif command == remove:
+            try:
+                selected_id = int(user_input)
+                query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selected_list, id=sql_id)
+                dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                if dancer is not None:
+                    remove_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                else:
+                    status_print('Dancer {num} is not on the selected list, '
+                                 'and can therefor not be removed from the tournament.'.format(num=selected_id))
+            except ValueError:
+                status_print('No/Incorrect user number given.')
+        elif command == removep:
+            try:
+                selected_id = int(user_input)
+                query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selected_list, id=sql_id)
+                dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                if dancer is not None:
+                    partner_id = ''
+                    query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_lead)
+                    couple = cli_curs.execute(query, (selected_id,)).fetchall()
+                    role = ''
+                    if len(couple) == 0:
+                        query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_follow)
+                        couple = cli_curs.execute(query, (selected_id,)).fetchall()
+                        if len(couple) != 0:
+                            role = roles['follow']
+                    elif len(couple) != 0:
+                        role = roles['lead']
+                    couple = couple[0]
+                    if role == roles['lead']:
+                        partner_id = couple[partner_dict[sql_follow]]
+                    elif role == roles['follow']:
+                        partner_id = couple[partner_dict[sql_lead]]
+                    if partner_id != '':
+                        status_print('Removing dancers number {sel} and {par} from the NTDS.'
+                                     .format(sel=selected_id, par=partner_id))
+                    remove_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                    remove_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
+                else:
+                    status_print('Dancer {num} is not on the selected list, '
+                                 'and can therefor not be removed from the tournament.'.format(num=selected_id))
+            except ValueError:
+                status_print('No/Incorrect user number given.')
+        elif command == delete:
+            try:
+                selected_id = int(user_input)
+                delete_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+            except ValueError:
+                status_print('No/Incorrect user number given.')
+        elif command == reinstate:
+            try:
+                selected_id = int(user_input)
+                query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=cancelled_list, id=sql_id)
+                dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                if dancer is not None:
+                    reinstate_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                else:
+                    status_print('Dancer {num} is not on the cancelled list, '
+                                 'and is already a part of the tournament selection process.'.format(num=selected_id))
+            except ValueError:
+                status_print('No/Incorrect user number given.')
+        elif command == 'list_selected':
+            query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=selected_list, id=sql_id)
+            selected_contestants = cli_curs.execute(query).fetchall()
+            if len(selected_contestants) > 0:
+                status_print('')
+                status_print('All {num} contestants that have been selected for the NTDS:'
+                             .format(num=len(selected_contestants)))
+                status_print('')
+                print_table(selected_contestants)
+                status_print('')
             else:
-                status_print('Selecting dancer number {num} on his/her own'.format(num=selected_id))
-                create_pair(selected_id, '', connection=connection, cursor=cli_curs)
-                move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
-        elif command == '-addp':
-            selected_id = int(user_input)
-            partner_id = find_partner(selected_id, connection=connection, cursor=cli_curs)
-            create_pair(selected_id, partner_id, connection=connection, cursor=cli_curs)
-            move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
-            move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
-        elif command == '-remove':
-            selected_id = int(user_input)
-            remove_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
-        elif command == '-removep':
-            selected_id = int(user_input)
-            partner_id = ''
-            query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_lead)
-            couple = cli_curs.execute(query, (selected_id,)).fetchall()
-            role = ''
-            if len(couple) == 0:
-                query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_follow)
-                couple = cli_curs.execute(query, (selected_id,)).fetchall()
-                if len(couple) != 0:
-                    role = roles['f']
-            elif len(couple) != 0:
-                role = roles['l']
-            couple = couple[0]
-            if role == roles['l']:
-                partner_id = couple[partner_dict[sql_follow]]
-            elif role == roles['f']:
-                partner_id = couple[partner_dict[sql_lead]]
-            if partner_id != '':
-                status_print('Removing dancers number {sel} and {par} from the NTDS.'
-                             .format(sel=selected_id, par=partner_id))
-            remove_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
-            remove_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
+                status_print('There are no selected for the NTDS.')
+                status_print('')
         elif command == 'list_available':
             query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=selection_list, id=sql_id)
             available_contestants = cli_curs.execute(query).fetchall()
@@ -1270,7 +1385,20 @@ def cli_parser(event):
                 print_table(available_contestants)
                 status_print('')
             else:
-                status_print('There are no contestants available for selection for the NTDS')
+                status_print('There are no contestants available for selection for the NTDS.')
+                status_print('')
+        elif command == 'list_cancelled':
+            query = 'SELECT * FROM {tn} ORDER BY {id}'.format(tn=cancelled_list, id=sql_id)
+            selected_contestants = cli_curs.execute(query).fetchall()
+            if len(selected_contestants) > 0:
+                status_print('')
+                status_print('All {num} contestants that have cancelled their signup for the NTDS:'
+                             .format(num=len(selected_contestants)))
+                status_print('')
+                print_table(selected_contestants)
+                status_print('')
+            else:
+                status_print('There are no contestants that have cancelled their signup for the NTDS.')
                 status_print('')
         elif command == 'list_beginners':
             query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? or {latin_level} = ? ORDER BY {id}'\
@@ -1481,8 +1609,18 @@ def cli_parser(event):
                 iterations = runs
             global gather_stats
             gather_stats = True
-            for i in range(iterations):
-                main_selection()
+            duration = time.time()
+            main_selection()
+            duration = int(time.time() - duration)
+            duration_warning = 'One selection run took about {time} seconds.\n'.format(time=duration)
+            duration_warning += 'Running all of the selections will take aproximately {time} minutes.\n'\
+                .format(time=round(iterations*duration/60))
+            duration_warning += 'Proceed?'
+            if messagebox.askyesno(root, message=duration_warning):
+                for i in range(iterations-1):
+                    main_selection()
+            else:
+                status_print('Cancelling statistics gathering.')
             gather_stats = False
         elif command == '-db':
             selected_db = str(user_input)
@@ -1531,28 +1669,32 @@ def main_selection():
     for team in competing_teams:
         city = team[team_dict[sql_city]]
         team_signup_list = team[team_dict[sql_signup_list]]
-        # Get maximum number of rows and extract signup list
-        wb = openpyxl.load_workbook(team_signup_list)
-        ws = wb.worksheets[0]
-        max_row = max_rc('row', ws)
-        city_signup_list = list(ws.iter_rows(min_col=1, min_row=2, max_col=max_col, max_row=max_row))
-        # Convert data to 2d list, replace None values with an empty string,
-        # increase the id numbers so that there are no duplicates, and add the city to the contestant
-        city_signup_list = [[cell.value for cell in row] for row in city_signup_list]
-        city_signup_list = [['' if elem is None else elem for elem in row] for row in city_signup_list]
-        city_signup_list = [[elem+total_number_of_contestants if isinstance(elem, int) else elem for elem in row]
-                            for row in city_signup_list]
-        for row in city_signup_list:
-            row.append(city)
-        total_signup_list.extend(city_signup_list)
-        # Copy the contestants to the SQL database
-        query = 'INSERT INTO {} VALUES ('.format(signup_list) + ('?,'*(max_col+1))[:-1] + ');'
-        for row in city_signup_list:
-            curs.execute(query, row)
-        query = 'INSERT INTO {} VALUES ('.format(selection_list) + ('?,'*(max_col+1))[:-1] + ');'
-        for row in city_signup_list:
-            curs.execute(query, row)
-        total_number_of_contestants += max_row-1
+        if os.path.isfile(path=team_signup_list):
+            status_print('{city} is entering the tournament, adding contestants to signup list'.format(city=city))
+            # Get maximum number of rows and extract signup list
+            wb = openpyxl.load_workbook(team_signup_list)
+            ws = wb.worksheets[0]
+            max_row = max_rc('row', ws)
+            city_signup_list = list(ws.iter_rows(min_col=1, min_row=2, max_col=max_col, max_row=max_row))
+            # Convert data to 2d list, replace None values with an empty string,
+            # increase the id numbers so that there are no duplicates, and add the city to the contestant
+            city_signup_list = [[cell.value for cell in row] for row in city_signup_list]
+            city_signup_list = [['' if elem is None else elem for elem in row] for row in city_signup_list]
+            city_signup_list = [[elem + total_number_of_contestants if isinstance(elem, int) else elem for elem in row]
+                                for row in city_signup_list]
+            for row in city_signup_list:
+                row.append(city)
+            total_signup_list.extend(city_signup_list)
+            # Copy the contestants to the SQL database
+            query = 'INSERT INTO {} VALUES ('.format(signup_list) + ('?,' * (max_col + 1))[:-1] + ');'
+            for row in city_signup_list:
+                curs.execute(query, row)
+            query = 'INSERT INTO {} VALUES ('.format(selection_list) + ('?,' * (max_col + 1))[:-1] + ');'
+            for row in city_signup_list:
+                curs.execute(query, row)
+            total_number_of_contestants += max_row - 1
+        else:
+            status_print('{city} is not entering the tournament'.format(city=city))
     conn.commit()
 
     ####################################################################################################################
