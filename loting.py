@@ -178,6 +178,7 @@ NTDS_student = option_yn
 NTDS_sleeping_location = {'yes': yes, 0: ''}
 NTDS_current_volunteer = options_ymn
 NTDS_past_volunteer = option_yn
+NTDS_same_sex = option_yn
 NTDS_options = {'ballroom_level': NTDS_ballroom_level, 'latin_level': NTDS_latin_level,
                 'ballroom_role': NTDS_ballroom_role, 'latin_role': NTDS_latin_role,
                 'ballroom_mandatory_blind_date': NTDS_ballroom_mandatory_blind_date,
@@ -186,7 +187,8 @@ NTDS_options = {'ballroom_level': NTDS_ballroom_level, 'latin_level': NTDS_latin
                 'first_aid': NTDS_first_aid, 'emergency_response_officer': NTDS_emergency_response_officer,
                 'ballroom_jury': NTDS_ballroom_jury, 'latin_jury': NTDS_latin_jury,
                 'student': NTDS_student, 'sleeping_location': NTDS_sleeping_location,
-                'current_volunteer': NTDS_current_volunteer, 'past_volunteer': NTDS_past_volunteer}
+                'current_volunteer': NTDS_current_volunteer, 'past_volunteer': NTDS_past_volunteer,
+                'same_sex': NTDS_same_sex}
 
 # SQL Table column names and dictionary for dancers lists
 sql_id = 'id'
@@ -1048,7 +1050,7 @@ def print_table(table):
                           'Student', 'Sleeping location', 'Volunteer', 'Past volunteer', 'Team']
     status_print(tabulate(formatted_table, headers=print_table_header, tablefmt='grid'), wrap=False)
 
-
+# TODO add same sex couples to overview
 def status_update():
     """"Data on the contestants of the active database"""
     status_connection = sql.connect(database_key['path'])
@@ -1151,6 +1153,8 @@ def status_update():
     data_text.insert(END, 'Past volunteers: {yes}\n'.format(yes=number_of_past_volunteer))
     data_text.insert(END, '\n')
     data_text.insert(END, 'Sleeping spots: {yes}'.format(yes=number_of_sleeping_spots))
+    # data_text.insert(END, '\n')
+    # data_text.insert(END, 'Sleeping spots: {yes}'.format(yes='DUMMY'))
     data_text.see(END)
     data_text.config(state=DISABLED)
     status_cursor.close()
