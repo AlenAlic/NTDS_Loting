@@ -13,8 +13,8 @@ missing module named vms_lib - imported by platform, C:\Users\Alen\PycharmProjec
 missing module named termios - imported by tty, C:\Users\Alen\PycharmProjects\NTDS_Loting\loting.py, getpass
 missing module named grp - imported by tarfile, shutil, C:\Users\Alen\PycharmProjects\NTDS_Loting\loting.py
 missing module named pwd - imported by posixpath, tarfile, shutil, http.server, webbrowser, C:\Users\Alen\PycharmProjects\NTDS_Loting\loting.py, netrc, getpass
-missing module named 'org.python' - imported by copy, C:\Users\Alen\PycharmProjects\NTDS_Loting\loting.py, xml.sax
 missing module named _dummy_threading - imported by dummy_threading, C:\Users\Alen\PycharmProjects\NTDS_Loting\loting.py
+missing module named 'org.python' - imported by copy, C:\Users\Alen\PycharmProjects\NTDS_Loting\loting.py, xml.sax
 missing module named wcwidth - imported by tabulate
 missing module named PIL - imported by openpyxl.drawing.image
 missing module named Image - imported by openpyxl.drawing.image

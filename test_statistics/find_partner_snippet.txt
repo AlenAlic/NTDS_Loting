@@ -1,0 +1,25 @@
+# if partner_id is None and number_of_potential_partners == 0:
+#     query = 'SELECT * FROM {tn} WHERE {ballroom_level} LIKE ? AND {latin_level} LIKE ? ' \
+#             'AND {ballroom_partner} = "" AND {latin_partner} = "" ' \
+#             'AND {ballroom_role} NOT LIKE ? AND latin_role LIKE ? ' \
+#         .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level,
+#                 ballroom_partner=sql_ballroom_partner, latin_partner=sql_latin_partner,
+#                 ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
+#     if city is None:
+#         query += ' AND {team} != ?'.format(team=sql_city)
+#     else:
+#         query += ' AND {team} = ?'.format(team=sql_city)
+#         team = city
+#     query += ' UNION SELECT * FROM {tn} WHERE {ballroom_level} LIKE ? AND {latin_level} LIKE ? ' \
+#              'AND {ballroom_partner} = "" AND {latin_partner} = "" ' \
+#              'AND {ballroom_role} LIKE ? AND latin_role NOT LIKE ? ' \
+#         .format(tn=selection_list, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level,
+#                 ballroom_partner=sql_ballroom_partner, latin_partner=sql_latin_partner,
+#                 ballroom_role=sql_ballroom_role, latin_role=sql_latin_role)
+#     if city is None:
+#         query += ' AND {team} != ?'.format(team=sql_city)
+#     else:
+#         query += ' AND {team} = ?'.format(team=sql_city)
+#         team = city
+#     potential_partners = cursor.execute(query, (ballroom_level, '%', ballroom_role, '%', team,
+#                                                 '%', latin_level, '%', latin_role, team)).fetchall()
