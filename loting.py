@@ -153,6 +153,7 @@ individual_list = 'individuals'
 # Formatting names
 lions = 'Lions'
 contestants = 'contestants'
+individuals = 'individuals'
 
 # selectable options
 NTDS_ballroom_level = levels
@@ -778,8 +779,7 @@ def create_tables(connection, cursor):
     """"Drops existing tables and creates new ones"""
     # Drop all existing tables (from previous run)
     tables_to_drop = [signup_list, selection_list, selected_list, cancelled_list, backup_list,
-                      team_list, partners_list, ref_partner_list, fixed_beginners_list, fixed_lions_list,
-                      contestants_list, beginners_list, lions_list, individual_list]
+                      team_list, partners_list, ref_partner_list, fixed_beginners_list, fixed_lions_list]
     for item in tables_to_drop:
         query = drop_table_query.format(item)
         cursor.execute(query)
@@ -821,6 +821,19 @@ def create_competing_teams(connection, cursor):
     query = 'SELECT * FROM {tn} ORDER BY {team}'.format(tn=team_list, team=sql_team)
     competing_cities_array = cursor.execute(query).fetchall()
     return competing_cities_array
+
+
+def get_competing_teams(cursor):
+    """"Temp"""
+    query = 'SELECT * FROM {tn} ORDER BY {team}'.format(tn=team_list, team=sql_team)
+    return cursor.execute(query).fetchall()
+
+
+def get_competing_cities(cursor):
+    """"Temp"""
+    competing_teams = get_competing_teams(cursor)
+    competing_cities = [row[team_dict[sql_city]] for row in competing_teams]
+    return competing_cities
 
 
 def reset_selection_tables(connection, cursor):
@@ -904,6 +917,63 @@ def export_excel_lists(cursor, timestamp, city=None):
     status_print('Saving output: "{file}"'.format(file=output_file))
     status_print('')
     workbook.save(output_file)
+
+
+def create_stats_file(cursor, timestamp):
+    """"Temp"""
+    status_print('Exporting statistics file')
+    query = 'SELECT * FROM {tn} ORDER BY {city}'.format(tn=team_list, city=sql_city)
+    stats_title = cursor.execute(query).fetchall()
+    stats_title = [city[team_dict[sql_city]] for city in stats_title]
+    stats_title.insert(0, 'id')
+    output_file = output_key['path'] + '_' + timestamp + '_Statistics' + xlsx_ext
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.worksheets[0]
+    worksheet.title = levels['beg']
+    query = 'SELECT * FROM {tn} ORDER by "ïd"'.format(tn=beginners_list)
+    output_data = list()
+    output_data.append(stats_title)
+    output_data.extend(cursor.execute(query).fetchall())
+    status_print('Exporting {}.'.format(levels['beg']))
+    for row in range(len(output_data)):
+        for column in range(len(output_title)):
+            cell = worksheet.cell(row=row + 1, column=column + 1)
+            cell.value = output_data[row][column]
+    workbook.save(output_file)
+    worksheet = workbook.create_sheet(lions)
+    query = 'SELECT * FROM {tn} ORDER by "ïd"'.format(tn=lions_list)
+    output_data = list()
+    output_data.append(stats_title)
+    output_data.extend(cursor.execute(query).fetchall())
+    status_print('Exporting {}.'.format(lions))
+    for row in range(len(output_data)):
+        for column in range(len(output_title)):
+            cell = worksheet.cell(row=row + 1, column=column + 1)
+            cell.value = output_data[row][column]
+    workbook.save(output_file)
+    worksheet = workbook.create_sheet(contestants)
+    query = 'SELECT * FROM {tn} ORDER by "ïd"'.format(tn=contestants_list)
+    output_data = list()
+    output_data.append(stats_title)
+    output_data.extend(cursor.execute(query).fetchall())
+    status_print('Exporting {}.'.format(contestants))
+    for row in range(len(output_data)):
+        for column in range(len(output_title)):
+            cell = worksheet.cell(row=row + 1, column=column + 1)
+            cell.value = output_data[row][column]
+    workbook.save(output_file)
+    # worksheet = workbook.create_sheet(individuals)
+    # query = 'SELECT * FROM {tn} ORDER by "ïd"'.format(tn=individual_list)
+    # output_data = list()
+    # output_data.append(stats_title)
+    # output_data.extend(cursor.execute(query).fetchall())
+    # status_print('Exporting {}.'.format(individuals))
+    # for row in range(len(output_data)):
+    #     for column in range(len(output_title)):
+    #         cell = worksheet.cell(row=row + 1, column=column + 1)
+    #         cell.value = output_data[row][column]
+    # workbook.save(output_file)
+    status_print('Finished exporting statistics')
 
 
 def print_ntds_config():
@@ -1011,6 +1081,9 @@ def command_help_text():
     status_print('')
     status_print(reinstate + ' n')
     status_print('Reinstates the signup of contestant number "n", placing them into the tournament selection pool.')
+    status_print('')
+    status_print(selectr + ' "City"')
+    status_print('Selects a random contestant from "City" (and their signed partner) for the NTDS.')
     status_print('')
     status_print(print_contestants)
     status_print('Prints a list of how much contestants each city has had selected.')
@@ -1300,9 +1373,9 @@ def list_volunteer(volunteer_role, cursor):
                     'Contestants that were a volunteer at a previous tournament:',
                     'There are no contestants available for selection that volunteered at a previous tournament.']
     else:
-        messages = ['Contestants that MIGHT want to volunteer',
-                    'Contestants that want to volunteer',
-                    'There are no contestants available for selection that want to volunteer']
+        messages = ['Contestants that MIGHT want to volunteer ',
+                    'Contestants that want to volunteer ',
+                    'There are no contestants available for selection that want to volunteer ']
         volunteer_dict = {sql_first_aid: 'as a First Aid Officer:',
                           sql_emergency_response_officer: 'as an Emergency Response Officer:',
                           sql_ballroom_jury: 'as a Ballroom Jury:', sql_latin_jury: 'as a Latin Jury:',
@@ -1342,6 +1415,7 @@ remove = '-remove'
 removep = '-removep'
 delete = '-delete'
 reinstate = '-reinstate'
+selectr = '-selectr'
 list_selected = 'list_selected'
 list_available = 'list_available'
 list_cancelled = 'list_cancelled'
@@ -1370,17 +1444,20 @@ finish_selection = 'finish_selection'
 export = 'export'
 
 
-def cli_parser(event):
+def cli_parser(event, alternate_input=''):
     """"Command line interface parser. Reads the given input and acts accordingly."""
     user_input = ''
-    command = cli_text.get()
-    cli_text.delete(0, END)
+    if alternate_input == '':
+        command = cli_text.get()
+        cli_text.delete(0, END)
+    else:
+        command = alternate_input
     # cli_text.config(state=DISABLED)
     connection = sql.connect(database_key['path'])
     cli_curs = connection.cursor()
     open_commands = [echo, help_com, exit_com,
                      stats, db]
-    db_commands = [select, selectp, remove, removep, delete, reinstate,
+    db_commands = [select, selectp, remove, removep, delete, reinstate, selectr,
                    list_selected, list_available, list_cancelled, list_backup,
                    list_selected_beginners, list_selected_breiten, list_selected_closed, list_selected_open,
                    list_available_beginners, list_available_breiten, list_available_closed, list_available_open,
@@ -1497,6 +1574,21 @@ def cli_parser(event):
                                  'and is already a part of the tournament selection process.'.format(num=selected_id))
             except ValueError:
                 status_print('No/Incorrect user number given.')
+        elif command == selectr:
+            # Create competing cities list
+            cities = get_competing_cities(cursor=cli_curs)
+            if user_input in cities:
+                random_city = str(user_input)
+                query = 'SELECT * from {tn} WHERE {city} =?'.format(tn=selection_list, city=sql_city)
+                dancers = cli_curs.execute(query, (random_city,)).fetchall()
+                if dancers is not None:
+                    dancer = random.choice(dancers)
+                    dancer_id = dancer[gen_dict[sql_id]]
+                    cli_parser('', alternate_input=select+' {id}'.format(id=dancer_id))
+                else:
+                    status_print('There are no dancers from {city} to select'.format(city=user_input))
+            else:
+                status_print(user_input + ' is not a valid city.')
         # List contestants (from a certain class) from specific lists
         elif command == list_selected:
             list_list(selected_list, cursor=cli_curs)
@@ -1607,6 +1699,7 @@ def cli_parser(event):
     if command in open_commands:
         if command == echo:
             status_print(command)
+            create_stats_file(cursor=cli_curs, timestamp=str(round(time.time())))
         elif command == help_com:
             command_help_text()
         elif command == exit_com:
@@ -1632,7 +1725,11 @@ def cli_parser(event):
                 duration_warning += 'Proceed?'
                 if messagebox.askyesno(root, message=duration_warning):
                     for i in range(iterations-1):
+                        status_print('')
+                        status_print('Starting run {i} of {it}'.format(i=i+2, it=iterations))
+                        status_print('')
                         main_selection()
+                    # create_stats_file(cursor=cli_curs, timestamp=str(round(time.time())))
                 else:
                     status_print('Cancelling statistics gathering.')
             gather_stats = False
@@ -1712,6 +1809,7 @@ def main_selection():
             total_number_of_contestants += max_row - 1
         else:
             status_print('{city} is not entering the tournament'.format(city=city))
+        conn.commit()
     conn.commit()
 
     ####################################################################################################################
