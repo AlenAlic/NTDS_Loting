@@ -1,6 +1,7 @@
 # Main file for the program
 import sqlite3 as sql
 import openpyxl
+from openpyxl.worksheet.datavalidation import DataValidation
 from random import randint
 import random
 import time
@@ -43,12 +44,23 @@ output_key = {'name': 'NTDS_Selection', 'folder': 'output', 'path': ''}
 output_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), output_key['folder'])
 output_key['path'] = os.path.join(output_key['path'], output_key['name'])
 
+# NODIG
 # TODO controle programma voor inschrijflijst
+# TODO add additional teams without crashing the system
+# TODO dummy
+# WISHLIST
 # TODO export, add formatting
+# TODO refactor (remove hardcoded material that snuck in)
+
+
+# Dit kan onder elk kopje gebeur
 # TODO create files and folders on first run
 # TODO config and user settings
-# TODO refactor (remove hardcoded material that snuck in)
-# TODO add additional teams without crashing the system
+# Create files if they are not there
+if not os.path.isfile(path=settings_key['path']):
+    open(settings_key['path'], 'w+').close()
+if not os.path.isfile(path=config_key['path']):
+    open(config_key['path'], 'w+').close()
 
 # Boundaries
 user_boundaries = False
@@ -59,7 +71,7 @@ beginner_signup_cutoff = int(max_contestants*20/100)
 buffer_for_selection = 40
 if os.path.isfile(path=settings_key['path']):
     config_parser.read(settings_key['path'])
-    if 'ContestantNumber' in config_parser:
+    if 'ContestantNumbers' in config_parser:
         user_boundaries = True
         max_contestants = config_parser['ContestantNumbers'].getint('MaximumNumberOfContestants')
         max_guaranteed_beginners = config_parser['ContestantNumbers'].getint('MinimumGuaranteedBeginners')
@@ -67,6 +79,9 @@ if os.path.isfile(path=settings_key['path']):
         beginner_signup_cutoff = int(max_contestants * config_parser['ContestantNumbers']
                                      .getint('BeginnerCutoffPercentage') / 100)
         buffer_for_selection = config_parser['ContestantNumbers'].getint('BufferForManualSelection')
+    else:
+        print('Dummy')
+        # Update file
 
 # Levels
 levels = {'beg': 'Beginners', 'breiten': 'Breitensport', 'closed': 'CloseD', 'open': 'Open Class', 0: ''}
@@ -74,6 +89,9 @@ if os.path.isfile(path=config_key['path']):
     config_parser.read(config_key['path'])
     if 'DancingClasses' in config_parser:
         levels = dict(config_parser.items('DancingClasses'))
+    else:
+        print('Dummy')
+        # Update file
 
 # Participating classes
 classes = [levels['beg'], levels['breiten'], levels['open']]
@@ -83,6 +101,9 @@ if os.path.isfile(path=settings_key['path']):
         for dancing_class in config_parser['AvailableClasses']:
             if config_parser['AvailableClasses'].getboolean(dancing_class):
                 classes.append(levels[dancing_class])
+    else:
+        print('Dummy')
+        # Update file
 
 # Roles
 roles = {'lead': 'Lead', 'follow': 'Follow', 0: ''}
@@ -90,6 +111,9 @@ if os.path.isfile(path=config_key['path']):
     config_parser.read(config_key['path'])
     if 'DancingClasses' in config_parser:
         roles = dict(config_parser.items('DancingRoles'))
+    else:
+        print('Dummy')
+        # Update file
 
 # Signup options
 yes = 'Ja'
@@ -104,6 +128,9 @@ if os.path.isfile(path=settings_key['path']):
         no = config_parser['YesMaybeNo']['No']
         options_ymn = dict(config_parser.items('YesMaybeNo'))
         option_yn = {'yes': yes, 'no': no}
+    else:
+        print('Dummy')
+        # Update file
 
 # Participants Lion points
 lion_participants = [levels['beg'], levels['breiten']]
@@ -113,6 +140,9 @@ if os.path.isfile(path=settings_key['path']):
         for lion_level in config_parser['Lions']:
             if config_parser['Lions'].getboolean(lion_level):
                 lion_participants.append(levels[lion_level])
+    else:
+        print('Dummy')
+        # Update file
 
 # Statistics options
 gather_stats = False
@@ -121,6 +151,9 @@ if os.path.isfile(path=settings_key['path']):
     if 'SelectionMode' in config_parser:
         gather_stats = config_parser['SelectionMode'].getboolean('StatisticalAnalysis', gather_stats)
         runs = config_parser['SelectionMode'].getint('NumberOfRunsForStatisticalAnalysis', runs)
+    else:
+        print('Dummy')
+        # Update file
 
 # Title for Excel export files
 output_title = []
@@ -155,7 +188,7 @@ lions = 'Lions'
 contestants = 'contestants'
 individuals = 'individuals'
 
-# selectable options
+# Selectable options
 NTDS_ballroom_level = levels
 NTDS_latin_level = levels
 NTDS_ballroom_role = roles
@@ -171,7 +204,6 @@ NTDS_student = option_yn
 NTDS_sleeping_location = {'yes': yes, 0: ''}
 NTDS_current_volunteer = options_ymn
 NTDS_past_volunteer = option_yn
-NTDS_same_sex = option_yn
 NTDS_options = {'ballroom_level': NTDS_ballroom_level, 'latin_level': NTDS_latin_level,
                 'ballroom_role': NTDS_ballroom_role, 'latin_role': NTDS_latin_role,
                 'ballroom_mandatory_blind_date': NTDS_ballroom_mandatory_blind_date,
@@ -180,8 +212,7 @@ NTDS_options = {'ballroom_level': NTDS_ballroom_level, 'latin_level': NTDS_latin
                 'first_aid': NTDS_first_aid, 'emergency_response_officer': NTDS_emergency_response_officer,
                 'ballroom_jury': NTDS_ballroom_jury, 'latin_jury': NTDS_latin_jury,
                 'student': NTDS_student, 'sleeping_location': NTDS_sleeping_location,
-                'current_volunteer': NTDS_current_volunteer, 'past_volunteer': NTDS_past_volunteer,
-                'same_sex': NTDS_same_sex}
+                'current_volunteer': NTDS_current_volunteer, 'past_volunteer': NTDS_past_volunteer}
 
 # SQL Table column names and dictionary for dancers lists
 sql_id = 'id'
@@ -208,7 +239,6 @@ sql_sleeping_location = 'sleeping_location'
 sql_diet = 'diet_wishes'
 sql_current_volunteer = 'current_volunteer'
 sql_previous_volunteer = 'past_volunteer'
-sql_same_sex = 'same_sex_competition'
 sql_city = 'city'
 gen_dict = {sql_id: 0, sql_first_name: 1, sql_ln_prefix: 2, sql_last_name: 3, sql_email: 4,
             sql_ballroom_level: 5, sql_latin_level: 6, sql_ballroom_partner: 7, sql_latin_partner: 8,
@@ -216,8 +246,8 @@ gen_dict = {sql_id: 0, sql_first_name: 1, sql_ln_prefix: 2, sql_last_name: 3, sq
             sql_ballroom_mandatory_blind_date: 11, sql_latin_mandatory_blind_date: 12,  sql_team_captain: 13,
             sql_first_aid: 14, sql_emergency_response_officer: 15, sql_ballroom_jury: 16, sql_latin_jury: 17,
             sql_student: 18, sql_sleeping_location: 19, sql_diet: 20,
-            sql_current_volunteer: 21, sql_previous_volunteer: 22, sql_same_sex: 23,
-            sql_city: 24}
+            sql_current_volunteer: 21, sql_previous_volunteer: 22,
+            sql_city: 23}
 
 # SQL Table column names and dictionary of teams list
 sql_team = 'team'
@@ -256,7 +286,7 @@ dancers_list_query = 'CREATE TABLE {table_name} ({id} INT PRIMARY KEY, ' \
                      '{ballroom_mandatory_blind_date} TEXT, {latin_mandatory_blind_date} TEXT, {team_captain} TEXT,' \
                      '{first_aid} TEXT, {emergency_response_officer} TEXT, {ballroom_jury} TEXT, {latin_jury} TEXT, ' \
                      '{student} TEXT, {sleeping_location} TEXT, {diet} TEXT, ' \
-                     '{current_volunteer} TEXT, {previous_volunteer} TEXT, {same_sex_competition} TEXT,' \
+                     '{current_volunteer} TEXT, {previous_volunteer} TEXT, ' \
                      '{city} TEXT);'\
      .format(table_name={}, id=sql_id, first_name=sql_first_name, ln_prefix=sql_ln_prefix, last_name=sql_last_name,
              email=sql_email, ballroom_level=sql_ballroom_level, latin_level=sql_latin_level,
@@ -268,7 +298,6 @@ dancers_list_query = 'CREATE TABLE {table_name} ({id} INT PRIMARY KEY, ' \
              ballroom_jury=sql_ballroom_jury, latin_jury=sql_latin_jury, student=sql_student,
              sleeping_location=sql_sleeping_location, diet=sql_diet,
              current_volunteer=sql_current_volunteer, previous_volunteer=sql_previous_volunteer,
-             same_sex_competition=sql_same_sex,
              city=sql_city)
 team_list_query = 'CREATE TABLE {tn} ({team} TEXT PRIMARY KEY, {city} TEXT, {signup_list} TEXT);' \
     .format(tn={}, team=sql_team, city=sql_city, signup_list=sql_signup_list)
@@ -434,14 +463,14 @@ def find_partner(identifier, connection, cursor, city=None, signed_partner_only=
                                                              ballroom_role, ballroom_role, team)).fetchall()
                 potential_partners += cursor.execute(query, (levels['breiten'], levels['open'],
                                                              ballroom_role, ballroom_role, team)).fetchall()
-            # Try to find a partner for a Null, breiten combination
+            # Try to find a partner for a Null, Breiten combination
             if all([ballroom_level == '', latin_level == levels['breiten'],
                     number_of_potential_partners == 0, partner_id is None]):
                 potential_partners += cursor.execute(query, (levels['breiten'], levels['breiten'],
                                                              latin_role, latin_role, team)).fetchall()
                 potential_partners += cursor.execute(query, (levels['open'], levels['breiten'],
                                                              latin_role, latin_role, team)).fetchall()
-            # Try to find a partner for a breiten, Open combination
+            # Try to find a partner for a Breiten, Open combination
             if all([ballroom_level == levels['breiten'], latin_level == levels['open'],
                     number_of_potential_partners == 0, partner_id is None]):
                 potential_partners += cursor.execute(query, (levels['breiten'], levels['breiten'],
@@ -1082,8 +1111,13 @@ def command_help_text():
     status_print(reinstate + ' n')
     status_print('Reinstates the signup of contestant number "n", placing them into the tournament selection pool.')
     status_print('')
-    status_print(selectr + ' "City"')
-    status_print('Selects a random contestant from "City" (and their signed partner) for the NTDS.')
+    status_print(selectr + ' input')
+    status_print('Selects a random contestant and a (virtual) partner for the NTDS.')
+    status_print('"input" can be one of the following statements:')
+    status_print('A city name. Doing this will select a random contestant from the given city.')
+    status_print(' / '.join((rinput_fa, rinput_ero, rinput_ballroom_jury, rinput_latin_jury)))
+    status_print('Select a random dancers that can volunteer as a First Aid Officer, an Emergency Response Officer, '
+                 'a Ballroom jury or a Latin jury respectively.')
     status_print('')
     status_print(print_contestants)
     status_print('Prints a list of how much contestants each city has had selected.')
@@ -1401,6 +1435,28 @@ def list_volunteer(volunteer_role, cursor):
         status_print(messages[2])
         status_print('')
 
+
+def select_random_volunteer(start_mesage, sql_var, cursor):
+    """"Temp"""
+    status_print(start_mesage)
+    query = 'SELECT * from {tn} WHERE {user_input} = ?'.format(tn=selection_list, user_input=sql_var)
+    dancers = cursor.execute(query, (yes,)).fetchall()
+    if dancers is not None:
+        dancer = random.choice(dancers)
+        dancer_id = dancer[gen_dict[sql_id]]
+        cli_parser('', alternate_input=selectp + ' {id}'.format(id=dancer_id))
+    else:
+        status_print('There are nog contestants that definitely want to fulfill this role.')
+        status_print('Looking for contestants that might want to fulfill it.')
+        dancers = cursor.execute(query, (maybe,)).fetchall()
+        if dancers is not None:
+            dancer = random.choice(dancers)
+            dancer_id = dancer[gen_dict[sql_id]]
+            cli_parser('', alternate_input=selectp + ' {id}'.format(id=dancer_id))
+        else:
+            status_print('There are no volunteers for this role to select')
+
+
 # CLI commands
 # Open commands, always available
 echo = 'echo'
@@ -1443,6 +1499,10 @@ print_breakdown = 'print_breakdown'
 finish_selection = 'finish_selection'
 export = 'export'
 
+rinput_fa = 'first_aid'
+rinput_ero = 'ERO'
+rinput_ballroom_jury = 'ballroom_jury'
+rinput_latin_jury = 'latin_jury'
 
 def cli_parser(event, alternate_input=''):
     """"Command line interface parser. Reads the given input and acts accordingly."""
@@ -1452,7 +1512,7 @@ def cli_parser(event, alternate_input=''):
         cli_text.delete(0, END)
     else:
         command = alternate_input
-    # cli_text.config(state=DISABLED)
+
     connection = sql.connect(database_key['path'])
     cli_curs = connection.cursor()
     open_commands = [echo, help_com, exit_com,
@@ -1472,6 +1532,7 @@ def cli_parser(event, alternate_input=''):
         else:
             user_input = ''
         command = command[0]
+
     if command in db_commands and os.path.isfile(database_key['path']) is True:
         if command == select:
             try:
@@ -1578,17 +1639,27 @@ def cli_parser(event, alternate_input=''):
             # Create competing cities list
             cities = get_competing_cities(cursor=cli_curs)
             if user_input in cities:
-                random_city = str(user_input)
-                query = 'SELECT * from {tn} WHERE {city} =?'.format(tn=selection_list, city=sql_city)
-                dancers = cli_curs.execute(query, (random_city,)).fetchall()
+                status_print('Selecting random contestant from ' + user_input + '.')
+                query = 'SELECT * from {tn} WHERE {user_input} = ?'.format(tn=selection_list, user_input=sql_city)
+                dancers = cli_curs.execute(query, (user_input,)).fetchall()
                 if dancers is not None:
                     dancer = random.choice(dancers)
                     dancer_id = dancer[gen_dict[sql_id]]
-                    cli_parser('', alternate_input=select+' {id}'.format(id=dancer_id))
+                    cli_parser('', alternate_input=selectp+' {id}'.format(id=dancer_id))
                 else:
                     status_print('There are no dancers from {city} to select'.format(city=user_input))
+            elif user_input == rinput_fa:
+                select_random_volunteer('Selecting random First Aid volunteer.', sql_first_aid, cursor=cli_curs)
+            elif user_input == rinput_ero:
+                select_random_volunteer('Selecting random Emergency Response Officer volunteer.',
+                                        sql_emergency_response_officer, cursor=cli_curs)
+            elif user_input == rinput_ballroom_jury:
+                select_random_volunteer('Selecting random Ballroom jury volunteer.', sql_ballroom_jury, cursor=cli_curs)
+            elif user_input == rinput_latin_jury:
+                select_random_volunteer('Selecting random Latin jury volunteer.', sql_latin_jury, cursor=cli_curs)
             else:
-                status_print(user_input + ' is not a valid city.')
+                status_print(user_input + ' is not a valid input.')
+
         # List contestants (from a certain class) from specific lists
         elif command == list_selected:
             list_list(selected_list, cursor=cli_curs)
@@ -1635,6 +1706,7 @@ def cli_parser(event, alternate_input=''):
             list_volunteer(sql_ballroom_jury, cursor=cli_curs)
         elif command == list_latin_jury:
             list_volunteer(sql_latin_jury, cursor=cli_curs)
+
         # Finish the selection of the tournament automatically
         elif command == finish_selection:
             status_print('')
@@ -1744,7 +1816,6 @@ def cli_parser(event, alternate_input=''):
         status_update()
     cli_curs.close()
     connection.close()
-    # cli_text.config(state=NORMAL)
     return event
 
 
@@ -1786,7 +1857,7 @@ def main_selection():
         if os.path.isfile(path=team_signup_list):
             status_print('{city} is entering the tournament, adding contestants to signup list'.format(city=city))
             # Get maximum number of rows and extract signup list
-            wb = openpyxl.load_workbook(team_signup_list)
+            wb = openpyxl.load_workbook(team_signup_list, data_only=True)
             ws = wb.worksheets[0]
             max_row = max_rc('row', ws)
             city_signup_list = list(ws.iter_rows(min_col=1, min_row=2, max_col=max_col, max_row=max_row))
@@ -1817,7 +1888,9 @@ def main_selection():
     ####################################################################################################################
     status_print('')
     status_print('Selecting team captains...')
-    query = 'SELECT * FROM {tn1} WHERE {tc} = "Ja"'.format(tn1=selection_list, tc=sql_team_captain)
+    query = 'WITH cities AS (SELECT DISTINCT {city} FROM {tn1} ORDER BY RANDOM()) SELECT {tn1}.* FROM cities ' \
+            'LEFT JOIN {tn1} ON ({tn1}.{city} = cities.{city} AND {tn1}.{tc} = "Ja") ORDER BY {tn1}.{tc}'\
+        .format(tn1=selection_list, tc=sql_team_captain, city=sql_city)
     team_captains = curs.execute(query).fetchall()
     for captain in team_captains:
         captain_id = captain[gen_dict[sql_id]]
@@ -2046,6 +2119,7 @@ def main_selection():
     conn.close()
     # Enable the CLI
     cli_text.config(state=NORMAL)
+
 
 if __name__ == "__main__":
     root = Tk()
