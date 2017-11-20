@@ -267,6 +267,7 @@ template_dict = {'id': '0,Nr.,INT PRIMARY KEY,3.57,' + num,
                  'sleeping_location': '21,Blijf je slapen in een slaapzaal op het NTDS?,TEXT,8.43,' + yn,
                  'diet_wishes': '22,Allergiën / Dieet,TEXT,8.43,' + an,
                  'city': '23,City,TEXT,0,' + an}
+config_parser = configparser.ConfigParser()
 if os.path.isfile(path=template_key['path']):
     config_parser.read(template_key['path'])
     if 'Template' in config_parser:
@@ -274,8 +275,10 @@ if os.path.isfile(path=template_key['path']):
             template_dict = dict(config_parser.items('Template'))
     else:
         config_parser.add_section('Template')
-        for key, value in levels.items():
+        for key, value in template_dict.items():
             config_parser.set('Template', str(key), str(value))
+    with open(template_key['path'], 'w') as configfile:
+        config_parser.write(configfile)
 
 # General dictionary
 gen_dict = dict()
@@ -1069,7 +1072,7 @@ def create_stats_file(cursor, timestamp):
     """"Temp"""
     status_print('Exporting statistics file')
     stats_title = get_competing_cities(cursor)
-    stats_title.insert(0, 'id')
+    stats_title.insert(0, 'run #')
     output_file = statistics_key['path'] + '_' + timestamp + xlsx_ext
     workbook = openpyxl.Workbook()
     worksheet = workbook.worksheets[0]
@@ -1113,7 +1116,8 @@ def create_stats_file(cursor, timestamp):
     output_title = list()
     output_title.extend(list(range(0, signed_contestants + 1)))
     output_title = list(map(str, output_title))
-    output_title[0] = 'id'
+    output_title = ['#'+x for x in output_title]
+    output_title[0] = 'run #'
     # TODO format contestant number
     output_data = list()
     output_data.append(output_title)
