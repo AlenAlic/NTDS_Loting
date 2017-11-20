@@ -1,10 +1,13 @@
 # Main file for the program
 import sqlite3 as sql
 import xlsxwriter
-from xlsxwriter.utility import xl_range, xl_col_to_name
+from xlsxwriter.utility import xl_range
 import openpyxl
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment
 from random import randint
 import random
+# TODO is random random?
 import time
 from tabulate import tabulate
 from tkinter import *
@@ -82,7 +85,6 @@ pathlib.Path(statistics_key['folder']).mkdir(parents=True, exist_ok=True)
 
 # NODIG
 # TODO controle programma voor inschrijflijst
-# TODO add additional teams without crashing the system
 # TODO Warning when NO signupsheets are available
 # WISHLIST
 # TODO refactor (remove hardcoded material that snuck in)
@@ -115,7 +117,7 @@ participating_teams_dict =\
      }
 
 # Levels
-levels = {'beginners': 'Beginners', 'breitensport': 'Breitensport', 'closed': 'CloseD', 'open class': 'Open Class',
+levels = {'beginners': 'Beginners', 'breitensport': 'Breitensport', 'closed': 'CloseD', 'open_class': 'Open Class',
           0: ''}
 # Roles
 roles = {'lead': 'Lead', 'follow': 'Follow', 0: ''}
@@ -127,7 +129,7 @@ options_yn = {'yes': options_ymn['yes'], 'no': options_ymn['no']}
 boundaries = {'max_contestants': 400, 'min_guaranteed_beginners': 4, 'min_fixed_lion_contestants': 10,
               'beginner_signup_cutoff_percentage': 20, 'buffer_for_selection_percentage': 10}
 # Participating classes
-classes = [levels['beginners'], levels['breitensport'], levels['open class']]
+classes = [levels['beginners'], levels['breitensport'], levels['open_class']]
 # Participants Lion points
 lion_participants = [levels['beginners'], levels['breitensport']]
 # Statistics options
@@ -207,8 +209,9 @@ if os.path.isfile(path=settings_key['path']):
                 classes.append(levels[dancing_class])
     else:
         config_parser.add_section('AvailableClasses')
-        for item in classes:
-            config_parser.set('AvailableClasses', str(item), str(True))
+        for index, item in enumerate(list(levels.values())):
+            if item in classes:
+                config_parser.set('AvailableClasses', str(list(levels.keys())[index]), str(True))
     if 'Lions' in config_parser:
         lion_participants = list()
         for lion_level in config_parser['Lions']:
@@ -216,8 +219,9 @@ if os.path.isfile(path=settings_key['path']):
                 lion_participants.append(levels[lion_level])
     else:
         config_parser.add_section('Lions')
-        for item in lion_participants:
-            config_parser.set('Lions', str(item), str(True))
+        for index, item in enumerate(list(levels.values())):
+            if item in lion_participants:
+                config_parser.set('Lions', str(list(levels.keys())[index]), str(True))
     if 'SelectionMode' in config_parser:
         gather_stats = config_parser['SelectionMode'].getboolean('StatisticalAnalysis', gather_stats)
         runs = config_parser['SelectionMode'].getint('NumberOfRunsForStatisticalAnalysis', runs)
@@ -231,7 +235,6 @@ boundaries['beginner_signup_cutoff'] = int(boundaries['max_contestants'] *
                                            boundaries['beginner_signup_cutoff_percentage'] / 100)
 boundaries['buffer_for_selection'] = int(boundaries['max_contestants'] *
                                          boundaries['buffer_for_selection_percentage'] / 100)
-# TODO Add error messages
 values_dict = {lvls: {'validate': 'list', 'source': classes},
                rls: {'validate': 'list', 'source': list(roles.values())},
                ymn: {'validate': 'list', 'source': list(options_ymn.values())},
@@ -303,7 +306,6 @@ with xlsxwriter.Workbook(excel_template_key['path']) as wb:
     unlocked = wb.add_format({'locked': False})
     locked = wb.add_format({'locked': True})
     f = wb.add_format({'text_wrap': True})
-    zzz = xl_col_to_name(1) + ':' + xl_col_to_name(len(template_values) - 1)
     ws.set_column(xl_range(0, len(template_values), 0, 16383), None, None, {'hidden': True})
     ws.set_default_row(hide_unused_rows=True)
     ws.set_row(0, 90, locked)
@@ -351,10 +353,10 @@ NTDS_options = {'ballroom_level': levels, 'latin_level': levels, 'ballroom_role'
                 'ballroom_jury': options_ymn, 'latin_jury': options_ymn, 'student': options_yn,
                 'sleeping_location': options_yn, 'current_volunteer': options_ymn, 'past_volunteer': options_yn}
 
-# TODO onderstaande ook omzetten
 # SQL Table column names and dictionary of teams list
 team_dict = {'team': 0, 'city': 1, 'signup_list': 2}
 
+# TODO onderstaande ook omzetten
 # SQL Table column names and dictionary for partners list
 sql_no = 'num'
 sql_lead = 'lead'
@@ -547,70 +549,70 @@ def find_partner(identifier, connection, cursor, city=None, signed_partner_only=
                     .fetchall()
                 potential_partners += cursor.execute(query, ('', levels['breitensport'], '', latin_role, team))\
                     .fetchall()
-                potential_partners += cursor.execute(query, (levels['breitensport'], levels['open class'],
+                potential_partners += cursor.execute(query, (levels['breitensport'], levels['open_class'],
                                                              ballroom_role, latin_role, team)).fetchall()
-                potential_partners += cursor.execute(query, (levels['open class'], levels['breitensport'],
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
                                                              ballroom_role, latin_role, team)).fetchall()
             # Try to find a partner for a breiten, Null combination
             if all([ballroom_level == levels['breitensport'], latin_level == '',
                     number_of_potential_partners == 0, partner_id is None]):
                 potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
                                                              ballroom_role, ballroom_role, team)).fetchall()
-                potential_partners += cursor.execute(query, (levels['breitensport'], levels['open class'],
+                potential_partners += cursor.execute(query, (levels['breitensport'], levels['open_class'],
                                                              ballroom_role, ballroom_role, team)).fetchall()
             # Try to find a partner for a Null, Breiten combination
             if all([ballroom_level == '', latin_level == levels['breitensport'],
                     number_of_potential_partners == 0, partner_id is None]):
                 potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
                                                              latin_role, latin_role, team)).fetchall()
-                potential_partners += cursor.execute(query, (levels['open class'], levels['breitensport'],
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
                                                              latin_role, latin_role, team)).fetchall()
             # Try to find a partner for a Breiten, Open combination
-            if all([ballroom_level == levels['breitensport'], latin_level == levels['open class'],
+            if all([ballroom_level == levels['breitensport'], latin_level == levels['open_class'],
                     number_of_potential_partners == 0, partner_id is None]):
                 potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
                                                              ballroom_role, latin_role, team)).fetchall()
                 potential_partners += cursor.execute(query, (levels['breitensport'], '', ballroom_role, '', team))\
                     .fetchall()
-                potential_partners += cursor.execute(query, (levels['open class'], levels['open class'],
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['open_class'],
                                                              ballroom_role, latin_role, team)).fetchall()
-                potential_partners += cursor.execute(query, ('', levels['open class'], '', latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, ('', levels['open_class'], '', latin_role, team)).fetchall()
             # Try to find a partner for a Open, Breiten combination
-            if all([ballroom_level == levels['open class'], latin_level == levels['breitensport'],
+            if all([ballroom_level == levels['open_class'], latin_level == levels['breitensport'],
                     number_of_potential_partners == 0, partner_id is None]):
                 potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
                                                              ballroom_role, latin_role, team)).fetchall()
                 potential_partners += cursor.execute(query, ('', levels['breitensport'], '', latin_role, team))\
                     .fetchall()
-                potential_partners += cursor.execute(query, (levels['open class'], levels['open class'],
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['open_class'],
                                                              ballroom_role, latin_role, team)).fetchall()
-                potential_partners += cursor.execute(query, (levels['open class'], '', ballroom_role, '', team))\
+                potential_partners += cursor.execute(query, (levels['open_class'], '', ballroom_role, '', team))\
                     .fetchall()
             # Try to find a partner for a Open, Open combination
-            if all([ballroom_level == levels['open class'], latin_level == levels['open class'],
+            if all([ballroom_level == levels['open_class'], latin_level == levels['open_class'],
                     number_of_potential_partners == 0, partner_id is None]):
-                potential_partners += cursor.execute(query, (levels['breitensport'], levels['open class'],
+                potential_partners += cursor.execute(query, (levels['breitensport'], levels['open_class'],
                                                              ballroom_role, latin_role, team)).fetchall()
-                potential_partners += cursor.execute(query, (levels['open class'], levels['breitensport'],
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
                                                              ballroom_role, latin_role, team)).fetchall()
-                potential_partners += cursor.execute(query, (levels['open class'], '', ballroom_role, '', team))\
+                potential_partners += cursor.execute(query, (levels['open_class'], '', ballroom_role, '', team))\
                     .fetchall()
-                potential_partners += cursor.execute(query, ('', levels['open class'], '', latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, ('', levels['open_class'], '', latin_role, team)).fetchall()
             # Try to find a partner for a Open, Null combination
-            if all([ballroom_level == levels['open class'], latin_level == '',
+            if all([ballroom_level == levels['open_class'], latin_level == '',
                     number_of_potential_partners == 0, partner_id is None]):
-                potential_partners += cursor.execute(query, (levels['open class'], levels['breitensport'],
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
                                                              ballroom_role, ballroom_role, team)).fetchall()
                 potential_partners += cursor\
-                    .execute(query, (levels['open class'], levels['open class'], ballroom_role, ballroom_role, team))\
+                    .execute(query, (levels['open_class'], levels['open_class'], ballroom_role, ballroom_role, team))\
                     .fetchall()
             # Try to find a partner for a Null, Open combination
-            if all([ballroom_level == '', latin_level == levels['open class'],
+            if all([ballroom_level == '', latin_level == levels['open_class'],
                     number_of_potential_partners == 0, partner_id is None]):
                 potential_partners += cursor\
-                    .execute(query, (levels['breitensport'], levels['open class'], latin_role, latin_role, team))\
+                    .execute(query, (levels['breitensport'], levels['open_class'], latin_role, latin_role, team))\
                     .fetchall()
-                potential_partners += cursor.execute(query, (levels['open class'], levels['open class'],
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['open_class'],
                                                              latin_role, latin_role, team)).fetchall()
         # If there is a potential partner, randomly select one
         if partner_id is None:
@@ -1027,6 +1029,13 @@ def export_excel_lists(cursor, timestamp, city=None):
         for column in range(len(template_values)):
             cell = worksheet.cell(row=row + 1, column=column + 1)
             cell.value = output_data[row][column]
+    for column in range(len(template_values)):
+        worksheet.column_dimensions[get_column_letter(column+1)].width = column_widths[column] + 0.71
+    worksheet.row_dimensions[1].height = 75
+    for column in range(len(template_values)):
+        cell = worksheet.cell(row=1, column=column + 1)
+        cell.alignment = Alignment(wrap_text=True)
+    worksheet.freeze_panes = 'A2'
     workbook.save(output_file)
     status_print('Exporting all dancers on the waiting list')
     worksheet = workbook.create_sheet('Waiting list')
@@ -1046,6 +1055,13 @@ def export_excel_lists(cursor, timestamp, city=None):
             cell.value = output_data[row][column]
     status_print('Saving output: "{file}"'.format(file=output_file))
     status_print('')
+    for column in range(len(template_values)):
+        worksheet.column_dimensions[get_column_letter(column+1)].width = column_widths[column] + 0.71
+    worksheet.row_dimensions[1].height = 75
+    for column in range(len(template_values)):
+        cell = worksheet.cell(row=1, column=column + 1)
+        cell.alignment = Alignment(wrap_text=True)
+    worksheet.freeze_panes = 'A2'
     workbook.save(output_file)
 
 
@@ -1305,7 +1321,7 @@ def status_update():
     status_dict['number_of_closed_ballroom_leads'] = \
         len(status_cursor.execute(query, (levels['closed'], roles['lead'])).fetchall())
     status_dict['number_of_open_ballroom_leads'] = \
-        len(status_cursor.execute(query, (levels['open class'], roles['lead'])).fetchall())
+        len(status_cursor.execute(query, (levels['open_class'], roles['lead'])).fetchall())
     status_dict['number_of_beginner_ballroom_follows'] = \
         len(status_cursor.execute(query, (levels['beginners'], roles['follow'])).fetchall())
     status_dict['number_of_breiten_ballroom_follows'] = \
@@ -1313,7 +1329,7 @@ def status_update():
     status_dict['number_of_closed_ballroom_follows'] = \
         len(status_cursor.execute(query, (levels['closed'], roles['follow'])).fetchall())
     status_dict['number_of_open_ballroom_follows'] = \
-        len(status_cursor.execute(query, (levels['open class'], roles['follow'])).fetchall())
+        len(status_cursor.execute(query, (levels['open_class'], roles['follow'])).fetchall())
 
     query = 'SELECT * FROM {tn} WHERE {latin_level} = ? AND {latin_role} = ?' \
         .format(tn=selected_list, latin_level=sql_dict['latin_level'], latin_role=sql_dict['latin_role'])
@@ -1324,7 +1340,7 @@ def status_update():
     status_dict['number_of_closed_latin_leads'] = \
         len(status_cursor.execute(query, (levels['closed'], roles['lead'])).fetchall())
     status_dict['number_of_open_latin_leads'] = \
-        len(status_cursor.execute(query, (levels['open class'], roles['lead'])).fetchall())
+        len(status_cursor.execute(query, (levels['open_class'], roles['lead'])).fetchall())
     status_dict['number_of_beginner_latin_follows'] = \
         len(status_cursor.execute(query, (levels['beginners'], roles['follow'])).fetchall())
     status_dict['number_of_breiten_latin_follows'] = \
@@ -1332,7 +1348,7 @@ def status_update():
     status_dict['number_of_closed_latin_follows'] = \
         len(status_cursor.execute(query, (levels['closed'], roles['follow'])).fetchall())
     status_dict['number_of_open_latin_follows'] = \
-        len(status_cursor.execute(query, (levels['open class'], roles['follow'])).fetchall())
+        len(status_cursor.execute(query, (levels['open_class'], roles['follow'])).fetchall())
 
     query = 'SELECT * FROM {tn} WHERE {first_aid} = ?'.format(tn=selected_list, first_aid=sql_dict['first_aid'])
     status_dict['number_of_first_aid_yes'] = \
@@ -1425,7 +1441,7 @@ def status_update():
         data_text.insert(END, 'CloseD Latin Follows: {num}\n'
                          .format(num=status_dict['number_of_closed_latin_follows']))
         data_text.insert(END, '\n')
-    if levels['open class'] in classes:
+    if levels['open_class'] in classes:
         data_text.insert(END, 'Open Class Ballroom Leads: {num}\n'
                          .format(num=status_dict['number_of_open_ballroom_leads']))
         data_text.insert(END, 'Open Class Ballroom Follows: {num}\n'
@@ -1841,7 +1857,7 @@ def cli_parser(event, alternate_input=''):
         elif command == list_selected_closed:
             list_level(levels['closed'], cursor=cli_curs, table_list=selected_list)
         elif command == list_selected_open:
-            list_level(levels['open class'], cursor=cli_curs, table_list=selected_list)
+            list_level(levels['open_class'], cursor=cli_curs, table_list=selected_list)
         elif command == list_available_beginners:
             list_level(levels['beginners'], cursor=cli_curs)
         elif command == list_available_breiten:
@@ -1849,7 +1865,7 @@ def cli_parser(event, alternate_input=''):
         elif command == list_available_closed:
             list_level(levels['closed'], cursor=cli_curs)
         elif command == list_available_open:
-            list_level(levels['open class'], cursor=cli_curs)
+            list_level(levels['open_class'], cursor=cli_curs)
         elif command == list_backup_beginners:
             list_level(levels['beginners'], cursor=cli_curs, table_list=backup_list)
         elif command == list_backup_breiten:
@@ -1857,7 +1873,7 @@ def cli_parser(event, alternate_input=''):
         elif command == list_backup_closed:
             list_level(levels['closed'], cursor=cli_curs, table_list=backup_list)
         elif command == list_backup_open:
-            list_level(levels['open class'], cursor=cli_curs, table_list=backup_list)
+            list_level(levels['open_class'], cursor=cli_curs, table_list=backup_list)
         # List volunteers (with a specific role)
         elif command == list_cv:
             list_volunteer(sql_dict['current_volunteer'], cursor=cli_curs)
