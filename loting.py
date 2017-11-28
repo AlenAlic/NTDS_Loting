@@ -84,7 +84,6 @@ pathlib.Path(output_key['folder']).mkdir(parents=True, exist_ok=True)
 pathlib.Path(statistics_key['folder']).mkdir(parents=True, exist_ok=True)
 
 # NODIG
-# TODO controle programma voor inschrijflijst
 # TODO Warning when NO signupsheets are available
 # WISHLIST
 # TODO refactor (remove hardcoded material that snuck in)
@@ -408,6 +407,9 @@ status_dict = dict()
 def find_partner(identifier, connection, cursor, city=None, signed_partner_only=False):
     """Finds the/a partner for a dancer, given id"""
     partner_id = None
+    if identifier == 37:
+        status_print('pause')
+    status_print('')
     status_print('Looking for a partner for dancer {id}'.format(id=identifier))
     query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_dict['id'])
     dancer = cursor.execute(query, (identifier,)).fetchone()
@@ -425,10 +427,15 @@ def find_partner(identifier, connection, cursor, city=None, signed_partner_only=
             latin_role = dancer[gen_dict['latin_role']]
         ballroom_partner = dancer[gen_dict['ballroom_partner']]
         latin_partner = dancer[gen_dict['latin_partner']]
+        # Check if the contestant's partner(s) are already selected for the tournament
+        query = 'SELECT * FROM {tn} WHERE {id} = ? OR {id} = ?'.format(tn=selected_list, id=sql_dict['id'])
+        partners_selected = cursor.execute(query, (ballroom_partner, latin_partner)).fetchall()
+        if len(partners_selected) > 0:
+            partner_id = identifier
         # Check if the contestant already has signed up with a partner (or two)
-        if isinstance(ballroom_partner, int) and ballroom_partner == latin_partner:
+        if isinstance(ballroom_partner, int) and ballroom_partner == latin_partner and partner_id is None:
             partner_id = ballroom_partner
-        if isinstance(ballroom_partner, int) and latin_partner == '':
+        if isinstance(ballroom_partner, int) and latin_partner == '' and partner_id is None:
             partner_id = ballroom_partner
             query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_dict['id'])
             partner = cursor.execute(query, (partner_id,)).fetchone()
@@ -438,7 +445,7 @@ def find_partner(identifier, connection, cursor, city=None, signed_partner_only=
                              .format(id1=ballroom_partner, id2=partner_latin_partner))
                 create_pair(ballroom_partner, partner_latin_partner, connection=connection, cursor=cursor)
                 move_selected_contestant(partner_latin_partner, connection=connection, cursor=cursor)
-        if ballroom_partner == '' and isinstance(latin_partner, int):
+        if ballroom_partner == '' and isinstance(latin_partner, int) and partner_id is None:
             partner_id = latin_partner
             query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_dict['id'])
             partner = cursor.execute(query, (partner_id,)).fetchone()
@@ -448,7 +455,8 @@ def find_partner(identifier, connection, cursor, city=None, signed_partner_only=
                              .format(id1=latin_partner, id2=partner_ballroom_partner))
                 create_pair(latin_partner, partner_ballroom_partner, connection=connection, cursor=cursor)
                 move_selected_contestant(partner_ballroom_partner, connection=connection, cursor=cursor)
-        if all([isinstance(ballroom_partner, int), isinstance(latin_partner, int), ballroom_partner != latin_partner]):
+        if all([isinstance(ballroom_partner, int), isinstance(latin_partner, int), ballroom_partner != latin_partner,
+                partner_id is None]):
             status_print('{id1} and {id2} signed up together'.format(id1=identifier, id2=ballroom_partner))
             create_pair(identifier, ballroom_partner, connection=connection, cursor=cursor)
             move_selected_contestant(ballroom_partner, connection=connection, cursor=cursor)
@@ -517,17 +525,19 @@ def find_partner(identifier, connection, cursor, city=None, signed_partner_only=
                 if number_of_potential_partners > 0:
                     random_num = randint(0, number_of_potential_partners - 1)
                     partner_id = potential_partners[random_num][gen_dict['id']]
-            query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? AND {ballroom_partner} = "" ' \
-                    'AND {latin_partner} = "" AND {ballroom_role} != ? AND latin_role != ? '\
-                .format(tn=selection_list,
-                        ballroom_level=sql_dict['ballroom_level'], latin_level=sql_dict['latin_level'],
-                        ballroom_partner=sql_dict['ballroom_partner'], latin_partner=sql_dict['latin_partner'],
-                        ballroom_role=sql_dict['ballroom_role'], latin_role=sql_dict['latin_role'])
-            if city is None:
-                query += ' AND {team} != ?'.format(team=sql_dict['city'])
-            else:
-                query += ' AND {team} = ?'.format(team=sql_dict['city'])
-                team = city
+            if partner_id is None:
+                query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? ' \
+                        'AND {ballroom_partner} = "" AND {latin_partner} = "" ' \
+                        'AND {ballroom_role} != ? AND latin_role != ? '\
+                    .format(tn=selection_list,
+                            ballroom_level=sql_dict['ballroom_level'], latin_level=sql_dict['latin_level'],
+                            ballroom_partner=sql_dict['ballroom_partner'], latin_partner=sql_dict['latin_partner'],
+                            ballroom_role=sql_dict['ballroom_role'], latin_role=sql_dict['latin_role'])
+                if city is None:
+                    query += ' AND {team} != ?'.format(team=sql_dict['city'])
+                else:
+                    query += ' AND {team} = ?'.format(team=sql_dict['city'])
+                    team = city
             # Try to find a partner for a beginner, beginner combination
             if all([ballroom_level == levels['beginners'], latin_level == levels['beginners'],
                     partner_id is None, number_of_potential_partners == 0]):
@@ -627,76 +637,82 @@ def find_partner(identifier, connection, cursor, city=None, signed_partner_only=
             status_print('Found no match for {id1}'.format(id1=identifier))
         elif partner_id is not None and ballroom_partner == '' and latin_partner == '':
             status_print('Matched {id1} and {id2} together'.format(id1=identifier, id2=partner_id))
+        elif partner_id == identifier:
+            status_print('TEMP')
     return partner_id
 
 
 def create_pair(first_dancer, second_dancer, connection, cursor):
     """Creates a pair of the two selected dancers and writes their data away in partner lists"""
     query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=signup_list, id=sql_dict['id'])
-    first_dancer = cursor.execute(query, (first_dancer,)).fetchone()
-    second_dancer = cursor.execute(query, (second_dancer,)).fetchone()
-    if first_dancer is None:
-        first_dancer_ballroom_role = ''
-        first_dancer_latin_role = ''
-    else:
-        first_dancer_ballroom_role = first_dancer[gen_dict['ballroom_role']]
-        first_dancer_latin_role = first_dancer[gen_dict['latin_role']]
-    if first_dancer_ballroom_role == roles['follow'] or first_dancer_latin_role == roles['follow']:
-        first_dancer, second_dancer = second_dancer, first_dancer
-    if first_dancer is None:
-        first_dancer_id = ''
-        first_dancer_team = ''
-        first_dancer_ballroom_level = ''
-        first_dancer_latin_level = ''
-    else:
-        first_dancer_id = first_dancer[gen_dict['id']]
-        first_dancer_team = first_dancer[gen_dict['city']]
-        first_dancer_ballroom_level = first_dancer[gen_dict['ballroom_level']]
-        first_dancer_latin_level = first_dancer[gen_dict['latin_level']]
-    if second_dancer is None:
-        second_dancer_id = ''
-        second_dancer_team = ''
-        second_dancer_ballroom_level = ''
-        second_dancer_latin_level = ''
-    else:
-        second_dancer_id = second_dancer[gen_dict['id']]
-        second_dancer_team = second_dancer[gen_dict['city']]
-        second_dancer_ballroom_level = second_dancer[gen_dict['ballroom_level']]
-        second_dancer_latin_level = second_dancer[gen_dict['latin_level']]
-    query = 'INSERT INTO {tn} ({lead}, {follow}, {lead_city}, {follow_city}, ' \
-            '{ballroom_level_lead}, {ballroom_level_follow}, {latin_level_lead}, {latin_level_follow}) ' \
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'\
-        .format(tn=partners_list,
-                lead=sql_lead, follow=sql_follow, lead_city=sql_city_lead, follow_city=sql_city_follow,
-                ballroom_level_lead=sql_ballroom_level_lead, ballroom_level_follow=sql_ballroom_level_follow,
-                latin_level_lead=sql_latin_level_lead, latin_level_follow=sql_latin_level_follow)
-    cursor.execute(query, (first_dancer_id, second_dancer_id, first_dancer_team, second_dancer_team,
-                           first_dancer_ballroom_level, second_dancer_ballroom_level,
-                           first_dancer_latin_level, second_dancer_latin_level))
-    query = 'INSERT INTO {tn} ({lead}, {follow}, {lead_city}, {follow_city}, ' \
-            '{ballroom_level_lead}, {ballroom_level_follow}, {latin_level_lead}, {latin_level_follow}) ' \
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?)' \
-        .format(tn=ref_partner_list,
-                lead=sql_lead, follow=sql_follow, lead_city=sql_city_lead, follow_city=sql_city_follow,
-                ballroom_level_lead=sql_ballroom_level_lead, ballroom_level_follow=sql_ballroom_level_follow,
-                latin_level_lead=sql_latin_level_lead, latin_level_follow=sql_latin_level_follow)
-    cursor.execute(query, (first_dancer_id, second_dancer_id, first_dancer_team, second_dancer_team,
-                           first_dancer_ballroom_level, second_dancer_ballroom_level,
-                           first_dancer_latin_level, second_dancer_latin_level))
-    query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=selection_list, id=sql_dict['id'])
-    cursor.executemany(query, [(first_dancer_id,), (second_dancer_id,)])
-    connection.commit()
+    if first_dancer != second_dancer:
+        first_dancer = cursor.execute(query, (first_dancer,)).fetchone()
+        second_dancer = cursor.execute(query, (second_dancer,)).fetchone()
+        if first_dancer is None:
+            first_dancer_ballroom_role = ''
+            first_dancer_latin_role = ''
+        else:
+            first_dancer_ballroom_role = first_dancer[gen_dict['ballroom_role']]
+            first_dancer_latin_role = first_dancer[gen_dict['latin_role']]
+        if first_dancer_ballroom_role == roles['follow'] or first_dancer_latin_role == roles['follow']:
+            first_dancer, second_dancer = second_dancer, first_dancer
+        if first_dancer is None:
+            first_dancer_id = ''
+            first_dancer_team = ''
+            first_dancer_ballroom_level = ''
+            first_dancer_latin_level = ''
+        else:
+            first_dancer_id = first_dancer[gen_dict['id']]
+            first_dancer_team = first_dancer[gen_dict['city']]
+            first_dancer_ballroom_level = first_dancer[gen_dict['ballroom_level']]
+            first_dancer_latin_level = first_dancer[gen_dict['latin_level']]
+        if second_dancer is None:
+            second_dancer_id = ''
+            second_dancer_team = ''
+            second_dancer_ballroom_level = ''
+            second_dancer_latin_level = ''
+        else:
+            second_dancer_id = second_dancer[gen_dict['id']]
+            second_dancer_team = second_dancer[gen_dict['city']]
+            second_dancer_ballroom_level = second_dancer[gen_dict['ballroom_level']]
+            second_dancer_latin_level = second_dancer[gen_dict['latin_level']]
+        query = 'INSERT INTO {tn} ({lead}, {follow}, {lead_city}, {follow_city}, ' \
+                '{ballroom_level_lead}, {ballroom_level_follow}, {latin_level_lead}, {latin_level_follow}) ' \
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'\
+            .format(tn=partners_list,
+                    lead=sql_lead, follow=sql_follow, lead_city=sql_city_lead, follow_city=sql_city_follow,
+                    ballroom_level_lead=sql_ballroom_level_lead, ballroom_level_follow=sql_ballroom_level_follow,
+                    latin_level_lead=sql_latin_level_lead, latin_level_follow=sql_latin_level_follow)
+        cursor.execute(query, (first_dancer_id, second_dancer_id, first_dancer_team, second_dancer_team,
+                               first_dancer_ballroom_level, second_dancer_ballroom_level,
+                               first_dancer_latin_level, second_dancer_latin_level))
+        query = 'INSERT INTO {tn} ({lead}, {follow}, {lead_city}, {follow_city}, ' \
+                '{ballroom_level_lead}, {ballroom_level_follow}, {latin_level_lead}, {latin_level_follow}) ' \
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)' \
+            .format(tn=ref_partner_list,
+                    lead=sql_lead, follow=sql_follow, lead_city=sql_city_lead, follow_city=sql_city_follow,
+                    ballroom_level_lead=sql_ballroom_level_lead, ballroom_level_follow=sql_ballroom_level_follow,
+                    latin_level_lead=sql_latin_level_lead, latin_level_follow=sql_latin_level_follow)
+        cursor.execute(query, (first_dancer_id, second_dancer_id, first_dancer_team, second_dancer_team,
+                               first_dancer_ballroom_level, second_dancer_ballroom_level,
+                               first_dancer_latin_level, second_dancer_latin_level))
+        query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=selection_list, id=sql_dict['id'])
+        cursor.executemany(query, [(first_dancer_id,), (second_dancer_id,)])
+        connection.commit()
 
 
 def move_selected_contestant(identifier, connection, cursor):
     """Moves dancer, given id, from the selection list to selected list"""
     if identifier is not None:
-        query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE id = ?;'.format(tn1=selected_list, tn2=signup_list)
-        cursor.execute(query, (identifier,))
-        query = 'DELETE FROM {tn} WHERE id = ?'.format(tn=selection_list)
-        cursor.execute(query, (identifier,))
-        connection.commit()
-        status_print('Selected {} for the NTDS'.format(identifier))
+        query = 'SELECT * FROM {tn} WHERE {id} = ?'.format(tn=selected_list, id=sql_dict['id'])
+        dancer_selected = cursor.execute(query, (identifier,)).fetchall()
+        if len(dancer_selected) == 0:
+            query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE id = ?;'.format(tn1=selected_list, tn2=signup_list)
+            cursor.execute(query, (identifier,))
+            query = 'DELETE FROM {tn} WHERE id = ?'.format(tn=selection_list)
+            cursor.execute(query, (identifier,))
+            connection.commit()
+            status_print('Selected {} for the NTDS'.format(identifier))
 
 
 def remove_selected_contestant(identifier, connection, cursor):
@@ -2097,6 +2113,7 @@ def main_selection():
         captain_selected = curs.execute(query, (captain_id,)).fetchone()
         if captain_selected is None:
             partner_id = find_partner(captain_id, connection=conn, cursor=curs)
+            # TODO Add comment that if no partner is found, select the partner alone
             create_pair(captain_id, partner_id, connection=conn, cursor=curs)
             move_selected_contestant(captain_id, connection=conn, cursor=curs)
             move_selected_contestant(partner_id, connection=conn, cursor=curs)

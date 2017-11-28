@@ -34,9 +34,9 @@ class EntryBox(object):
             b_submit['command'] = lambda: self.entry_to_dict(dict_key)
             b_submit.pack(side='left', padx=8, pady=8)
 
-        b_cancel = tki.Button(frm, text='Cancel', width=10)
-        b_cancel['command'] = self.top.destroy
-        b_cancel.pack(side='left', padx=8, pady=8)
+            b_cancel = tki.Button(frm, text='Cancel', width=10)
+            b_cancel['command'] = self.top.destroy
+            b_cancel.pack(side='left', padx=8, pady=8)
 
         self.centre()
         self.top.grab_set()
