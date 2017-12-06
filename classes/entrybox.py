@@ -35,7 +35,7 @@ class EntryBox(object):
             b_submit.pack(side='left', padx=8, pady=8)
 
             b_cancel = tki.Button(frm, text='Cancel', width=10)
-            b_cancel['command'] = self.top.destroy
+            b_cancel['command'] = lambda: self.press_cancel(dict_key)
             b_cancel.pack(side='left', padx=8, pady=8)
 
         self.centre()
@@ -46,6 +46,13 @@ class EntryBox(object):
         if data:
             d, key = dict_key
             d[key] = data
+            self.top.destroy()
+
+    def press_cancel(self, dict_key):
+        data = self.entry.get()
+        if data:
+            d, key = dict_key
+            d[key] = ''
             self.top.destroy()
 
     def centre(self):

@@ -30,6 +30,7 @@ xlsx_ext = '.xlsx'
 ini_ext = '.ini'
 database_key = {'db': '', 'path': ''}
 max_row = 201
+runs = 1000
 
 # Folder names
 config_folder = 'config'
@@ -83,12 +84,8 @@ pathlib.Path(sheets_key['folder']).mkdir(parents=True, exist_ok=True)
 pathlib.Path(output_key['folder']).mkdir(parents=True, exist_ok=True)
 pathlib.Path(statistics_key['folder']).mkdir(parents=True, exist_ok=True)
 
-# NODIG
-# TODO Warning when NO signupsheets are available
 # WISHLIST
 # TODO refactor (remove hardcoded material that snuck in)
-
-# Dit kan onder elk kopje gebeuren
 
 # Create files if they are not there
 if not os.path.isfile(path=config_key['path']):
@@ -131,9 +128,6 @@ boundaries = {'max_contestants': 400, 'min_guaranteed_beginners': 4, 'min_fixed_
 classes = [levels['beginners'], levels['breitensport'], levels['open_class']]
 # Participants Lion points
 lion_participants = [levels['beginners'], levels['breitensport']]
-# Statistics options
-gather_stats = False
-runs = 1000
 
 lvls = 'DancingClasses'
 rls = 'DancingRoles'
@@ -142,15 +136,39 @@ yn = 'YesNo'
 an = 'Any'
 num = 'Number'
 
+cont_num = 'ContestantNumbers'
+avail_cls = 'AvailableClasses'
+lio = 'Lions'
 
-def read_add_config(parser, section, var):
+template = 'Template'
+
+
+def read_add_config(parser, section, var, output=None, user_dict=None, var_type=None):
     """"Temp"""
-    if section in parser:
-        var = dict(parser.items(section))
-    else:
-        parser.add_section(section)
-        for k, v in var.items():
-            parser.set(section, str(k), str(v))
+    if output is None:
+        if section in parser:
+            var = dict(parser.items(section))
+            if var_type is not None:
+                for k, v in var.items():
+                    try:
+                        var[k] = var_type(v)
+                    except KeyError:
+                        pass
+        else:
+            parser.add_section(section)
+            for k, v in var.items():
+                parser.set(section, str(k), str(v))
+    elif output == 'list' and user_dict is not None:
+        if section in parser:
+            var = list()
+            for it in parser[section]:
+                if parser[section].getboolean(it):
+                    var.append(user_dict[it])
+        else:
+            parser.add_section(section)
+            for ind, it in enumerate(list(user_dict.values())):
+                if it in var:
+                    parser.set(section, str(list(user_dict.keys())[ind]), str(True))
     return var
 
 
@@ -161,6 +179,7 @@ def add_config(parser, section, var):
         parser.set(section, str(k), str(v))
 
 
+# Create participating teams ini
 config_parser = configparser.ConfigParser()
 if os.path.isfile(path=participating_teams_key['path']):
     config_parser.read(participating_teams_key['path'])
@@ -174,6 +193,7 @@ if os.path.isfile(path=participating_teams_key['path']):
     with open(participating_teams_key['path'], 'w') as configfile:
         config_parser.write(configfile)
 
+# Create config ini
 config_parser = configparser.ConfigParser()
 if os.path.isfile(path=config_key['path']):
     config_parser.read(config_key['path'])
@@ -184,62 +204,19 @@ if os.path.isfile(path=config_key['path']):
     with open(config_key['path'], 'w') as configfile:
         config_parser.write(configfile)
 
-# TODO Refactor this
-user_boundaries = False
+# Create settings ini
 config_parser = configparser.ConfigParser()
 if os.path.isfile(path=settings_key['path']):
     config_parser.read(settings_key['path'])
-    if 'ContestantNumbers' in config_parser:
-        user_boundaries = True
-        boundaries = dict(config_parser.items('ContestantNumbers'))
-        for key, value in boundaries.items():
-            try:
-                boundaries[key] = int(value)
-            except KeyError:
-                pass
-    else:
-        config_parser.add_section('ContestantNumbers')
-        for key, value in boundaries.items():
-            config_parser.set('ContestantNumbers', str(key), str(value))
-    if 'AvailableClasses' in config_parser:
-        classes = list()
-        for dancing_class in config_parser['AvailableClasses']:
-            if config_parser['AvailableClasses'].getboolean(dancing_class):
-                classes.append(levels[dancing_class])
-    else:
-        config_parser.add_section('AvailableClasses')
-        for index, item in enumerate(list(levels.values())):
-            if item in classes:
-                config_parser.set('AvailableClasses', str(list(levels.keys())[index]), str(True))
-    if 'Lions' in config_parser:
-        lion_participants = list()
-        for lion_level in config_parser['Lions']:
-            if config_parser['Lions'].getboolean(lion_level):
-                lion_participants.append(levels[lion_level])
-    else:
-        config_parser.add_section('Lions')
-        for index, item in enumerate(list(levels.values())):
-            if item in lion_participants:
-                config_parser.set('Lions', str(list(levels.keys())[index]), str(True))
-    if 'SelectionMode' in config_parser:
-        gather_stats = config_parser['SelectionMode'].getboolean('StatisticalAnalysis', gather_stats)
-        runs = config_parser['SelectionMode'].getint('NumberOfRunsForStatisticalAnalysis', runs)
-    else:
-        config_parser.add_section('SelectionMode')
-        config_parser.set('SelectionMode', str('StatisticalAnalysis'), str(gather_stats))
-        config_parser.set('SelectionMode', str('NumberOfRunsForStatisticalAnalysis'), str(runs))
+    boundaries = read_add_config(config_parser, cont_num, boundaries, var_type=int)
+    classes = read_add_config(config_parser, avail_cls, classes, output='list', user_dict=levels)
+    lion_participants = read_add_config(config_parser, lio, lion_participants, output='list', user_dict=levels)
     with open(settings_key['path'], 'w') as configfile:
         config_parser.write(configfile)
 boundaries['beginner_signup_cutoff'] = int(boundaries['max_contestants'] *
                                            boundaries['beginner_signup_cutoff_percentage'] / 100)
 boundaries['buffer_for_selection'] = int(boundaries['max_contestants'] *
                                          boundaries['buffer_for_selection_percentage'] / 100)
-values_dict = {lvls: {'validate': 'list', 'source': classes},
-               rls: {'validate': 'list', 'source': list(roles.values())},
-               ymn: {'validate': 'list', 'source': list(options_ymn.values())},
-               yn: {'validate': 'list', 'source': list(options_yn.values())},
-               an: {'validate': 'any'},
-               num: {'validate': 'integer', 'criteria': '>', 'value': 0}}
 
 # Title for Excel export files
 template_dict = {'id': '0,Nr.,INT PRIMARY KEY,3.57,' + num,
@@ -269,30 +246,9 @@ template_dict = {'id': '0,Nr.,INT PRIMARY KEY,3.57,' + num,
 config_parser = configparser.ConfigParser()
 if os.path.isfile(path=template_key['path']):
     config_parser.read(template_key['path'])
-    if 'Template' in config_parser:
-        for key in config_parser['Template']:
-            template_dict = dict(config_parser.items('Template'))
-    else:
-        config_parser.add_section('Template')
-        for key, value in template_dict.items():
-            config_parser.set('Template', str(key), str(value))
+    template_dict = read_add_config(config_parser, template, template_dict)
     with open(template_key['path'], 'w') as configfile:
         config_parser.write(configfile)
-
-# General dictionary
-gen_dict = dict()
-for key, value in template_dict.items():
-    gen_dict[key] = int(value.split(',')[0])
-
-# SQL dictionary
-sql_dict = dict()
-for key, value in template_dict.items():
-    sql_dict[key] = key
-
-# Dictionary to create SQL query
-dancers_list_dict = dict()
-for key, value in template_dict.items():
-    dancers_list_dict[key] = value.split(',')[2]
 
 # Template values
 template_values = [x.split(',')[1] for x in list(template_dict.values())]
@@ -301,6 +257,14 @@ column_widths = [float(x.split(',')[3]) for x in list(template_dict.values())]
 column_widths = column_widths[:-1]
 column_options = [x.split(',')[4] for x in list(template_dict.values())]
 column_options = column_options[:-1]
+
+# Data validation values for Excel
+validation_dict = {lvls: {'validate': 'list', 'source': classes},
+                   rls: {'validate': 'list', 'source': list(roles.values())},
+                   ymn: {'validate': 'list', 'source': list(options_ymn.values())},
+                   yn: {'validate': 'list', 'source': list(options_yn.values())},
+                   an: {'validate': 'any'},
+                   num: {'validate': 'integer', 'criteria': '>', 'value': 0}}
 
 # Create Excel template file
 with xlsxwriter.Workbook(excel_template_key['path']) as wb:
@@ -318,13 +282,28 @@ with xlsxwriter.Workbook(excel_template_key['path']) as wb:
         ws.set_row(r, 15)
         ws.write_formula(r, 0, '=IF(B' + str(r+1) + '<>"",ROW(A' + str(r+1) + ')-1,"")')
     for c in range(0, len(template_values)):
-        ws.data_validation(1, c, max_row, c, dict(values_dict[column_options[c]]))
+        ws.data_validation(1, c, max_row, c, dict(validation_dict[column_options[c]]))
     ws.freeze_panes(1, 0)
     ws.set_column('A:A', column_widths[0], locked)
     ws.protect(template_password)
 # Create signup sheets for team captains to fill in
 for key, value in participating_teams_dict.items():
     shutil.copy2(excel_template_key['path'], os.path.join(sheets_key['folder'], value['signup_sheet']))
+
+# General dictionary
+gen_dict = dict()
+for key, value in template_dict.items():
+    gen_dict[key] = int(value.split(',')[0])
+
+# SQL dictionary
+sql_dict = dict()
+for key, value in template_dict.items():
+    sql_dict[key] = key
+
+# Dictionary to create SQL query
+dancers_list_dict = dict()
+for key, value in template_dict.items():
+    dancers_list_dict[key] = value.split(',')[2]
 
 # Table names
 signup_list = 'signup_list'
@@ -348,35 +327,23 @@ contestants = 'contestants'
 individuals = 'individuals'
 
 # Selectable options
-# TODO omzetten zodat het automatisch gaat
-NTDS_options = {'ballroom_level': levels, 'latin_level': levels, 'ballroom_role': roles, 'latin_role': roles,
-                'ballroom_mandatory_blind_date': options_yn, 'latin_mandatory_blind_date': options_yn,
-                'team_captain': options_yn, 'first_aid': options_ymn, 'emergency_response_officer': options_ymn,
-                'ballroom_jury': options_ymn, 'latin_jury': options_ymn, 'student': options_yn,
-                'sleeping_location': options_yn, 'current_volunteer': options_ymn, 'past_volunteer': options_yn}
+options_dict = {lvls: levels, rls: roles, yn: options_yn, ymn: options_ymn}
+NTDS_options = dict()
+for key, value in template_dict.items():
+    if value.split(',')[4] in [lvls, rls, yn, ymn]:
+        NTDS_options[key] = options_dict[value.split(',')[4]]
 
 # SQL Table column names and dictionary of teams list
 team_dict = {'team': 0, 'city': 1, 'signup_list': 2}
 
-# TODO onderstaande ook omzetten
 # SQL Table column names and dictionary for partners list
-sql_no = 'num'
-sql_lead = 'lead'
-sql_follow = 'follow'
-sql_city_lead = 'city_lead'
-sql_city_follow = 'city_follow'
-sql_ballroom_level_lead = 'ballroom_level_lead'
-sql_ballroom_level_follow = 'ballroom_level_follow'
-sql_latin_level_lead = 'latin_level_lead'
-sql_latin_level_follow = 'latin_level_follow'
-partner_dict = {sql_no: 0, sql_lead: 1, sql_follow: 2, sql_city_lead: 3, sql_city_follow: 4,
-                sql_ballroom_level_lead: 5, sql_ballroom_level_follow: 6,
-                sql_latin_level_lead: 7, sql_latin_level_follow: 8}
+partner_dict = {'num': 0, 'lead': 1, 'follow': 2, 'city_lead': 3, 'city_follow': 4,
+                'ballroom_level_lead': 5, 'ballroom_level_follow': 6, 'latin_level_lead': 7, 'latin_level_follow': 8}
+partner_sql_dict = {key: key for key in partner_dict}
 
 # SQL Table column names and dictionary for city list
-sql_num_con = 'number_of_contestants'
-sql_max_con = 'max_contestants'
-city_dict = {sql_dict['city']: 0, sql_num_con: 1, sql_max_con: 2}
+city_dict = {sql_dict['city']: 0, 'number_of_contestants': 1, 'max_contestants': 2}
+city_sql_dict = {key: key for key in city_dict}
 
 # SQL Table column names for individuals list
 sql_run = 'run_number'
@@ -394,14 +361,20 @@ paren_table_query = 'CREATE TABLE {tn} ({no} INTEGER PRIMARY KEY AUTOINCREMENT, 
                     '{lead} INT, {follow} INT, {lead_city} TEXT, {follow_city} TEXT, ' \
                     '{ballroom_level_lead} TEXT, {ballroom_level_follow} TEXT, ' \
                     '{latin_level_lead} TEXT, {latin_level_follow} TEXT);'\
-    .format(tn={}, no=sql_no, lead=sql_lead, follow=sql_follow, lead_city=sql_city_lead, follow_city=sql_city_follow,
-            ballroom_level_lead=sql_ballroom_level_lead, ballroom_level_follow=sql_ballroom_level_follow,
-            latin_level_lead=sql_latin_level_lead, latin_level_follow=sql_latin_level_follow)
+    .format(tn={}, no=partner_sql_dict['num'], lead=partner_sql_dict['lead'], follow=partner_sql_dict['follow'],
+            lead_city=partner_sql_dict['city_lead'], follow_city=partner_sql_dict['city_follow'],
+            ballroom_level_lead=partner_sql_dict['ballroom_level_lead'],
+            ballroom_level_follow=partner_sql_dict['ballroom_level_follow'],
+            latin_level_lead=partner_sql_dict['latin_level_lead'],
+            latin_level_follow=partner_sql_dict['latin_level_follow'])
 city_list_query = 'CREATE TABLE {tn} ({city} TEXT, {num} INT, {max_num} INT);' \
-    .format(tn={}, city=sql_dict['city'], num=sql_num_con, max_num=sql_max_con)
+    .format(tn={}, city=sql_dict['city'], num=city_sql_dict['number_of_contestants'],
+            max_num=city_sql_dict['max_contestants'])
 
 
 status_dict = dict()
+# Get maximum number of columns
+max_col = len(template_values)
 
 
 def find_partner(identifier, connection, cursor, city=None, signed_partner_only=False):
@@ -680,9 +653,12 @@ def create_pair(first_dancer, second_dancer, connection, cursor):
                 '{ballroom_level_lead}, {ballroom_level_follow}, {latin_level_lead}, {latin_level_follow}) ' \
                 'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'\
             .format(tn=partners_list,
-                    lead=sql_lead, follow=sql_follow, lead_city=sql_city_lead, follow_city=sql_city_follow,
-                    ballroom_level_lead=sql_ballroom_level_lead, ballroom_level_follow=sql_ballroom_level_follow,
-                    latin_level_lead=sql_latin_level_lead, latin_level_follow=sql_latin_level_follow)
+                    lead=partner_sql_dict['lead'], follow=partner_sql_dict['follow'],
+                    lead_city=partner_sql_dict['city_lead'], follow_city=partner_sql_dict['city_follow'],
+                    ballroom_level_lead=partner_sql_dict['ballroom_level_lead'],
+                    ballroom_level_follow=partner_sql_dict['ballroom_level_follow'],
+                    latin_level_lead=partner_sql_dict['latin_level_lead'],
+                    latin_level_follow=partner_sql_dict['latin_level_follow'])
         cursor.execute(query, (first_dancer_id, second_dancer_id, first_dancer_team, second_dancer_team,
                                first_dancer_ballroom_level, second_dancer_ballroom_level,
                                first_dancer_latin_level, second_dancer_latin_level))
@@ -690,9 +666,12 @@ def create_pair(first_dancer, second_dancer, connection, cursor):
                 '{ballroom_level_lead}, {ballroom_level_follow}, {latin_level_lead}, {latin_level_follow}) ' \
                 'VALUES (?, ?, ?, ?, ?, ?, ?, ?)' \
             .format(tn=ref_partner_list,
-                    lead=sql_lead, follow=sql_follow, lead_city=sql_city_lead, follow_city=sql_city_follow,
-                    ballroom_level_lead=sql_ballroom_level_lead, ballroom_level_follow=sql_ballroom_level_follow,
-                    latin_level_lead=sql_latin_level_lead, latin_level_follow=sql_latin_level_follow)
+                    lead=partner_sql_dict['lead'], follow=partner_sql_dict['follow'],
+                    lead_city=partner_sql_dict['city_lead'], follow_city=partner_sql_dict['city_follow'],
+                    ballroom_level_lead=partner_sql_dict['ballroom_level_lead'],
+                    ballroom_level_follow=partner_sql_dict['ballroom_level_follow'],
+                    latin_level_lead=partner_sql_dict['latin_level_lead'],
+                    latin_level_follow=partner_sql_dict['latin_level_follow'])
         cursor.execute(query, (first_dancer_id, second_dancer_id, first_dancer_team, second_dancer_team,
                                first_dancer_ballroom_level, second_dancer_ballroom_level,
                                first_dancer_latin_level, second_dancer_latin_level))
@@ -718,38 +697,40 @@ def move_selected_contestant(identifier, connection, cursor):
 def remove_selected_contestant(identifier, connection, cursor):
     """Temp"""
     if identifier is not None:
-        query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_lead)
+        query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=partner_sql_dict['lead'])
         couple = cursor.execute(query, (identifier,)).fetchall()
         role = ''
         if len(couple) == 0:
-            query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_follow)
+            query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=partner_sql_dict['follow'])
             couple = cursor.execute(query, (identifier,)).fetchall()
             if len(couple) != 0:
                 role = roles['follow']
         elif len(couple) != 0:
             role = roles['lead']
         couple = couple[0]
-        couple_id = couple[partner_dict[sql_no]]
+        couple_id = couple[partner_dict['num']]
         if role == roles['lead']:
             query = 'UPDATE {tn} SET {role} = "", {city} = "", {ballroom_level} = "", ' \
                     '{latin_level} = "" WHERE {role} = ?' \
                 .format(tn=ref_partner_list,
-                        role=sql_lead, city=sql_city_lead,
-                        ballroom_level=sql_ballroom_level_lead, latin_level=sql_latin_level_lead)
+                        role=partner_sql_dict['lead'], city=partner_sql_dict['city_lead'],
+                        ballroom_level=partner_sql_dict['ballroom_level_lead'],
+                        latin_level=partner_sql_dict['latin_level_lead'])
             cursor.execute(query, (identifier,))
         elif role == roles['follow']:
             query = 'UPDATE {tn} SET {role} = "", {city} = "", {ballroom_level} = "", ' \
                     '{latin_level} = "" WHERE {role} = ?' \
                 .format(tn=ref_partner_list,
-                        role=sql_follow, city=sql_city_follow,
-                        ballroom_level=sql_ballroom_level_follow, latin_level=sql_latin_level_follow)
+                        role=partner_sql_dict['follow'], city=partner_sql_dict['city_follow'],
+                        ballroom_level=partner_sql_dict['ballroom_level_follow'],
+                        latin_level=partner_sql_dict['latin_level_follow'])
             cursor.execute(query, (identifier,))
         connection.commit()
-        query = 'SELECT * FROM {tn} WHERE {num} = ?'.format(tn=ref_partner_list, num=sql_no)
+        query = 'SELECT * FROM {tn} WHERE {num} = ?'.format(tn=ref_partner_list, num=partner_sql_dict['num'])
         couple = cursor.execute(query, (couple_id,)).fetchall()
         couple = couple[0]
-        if couple[partner_dict[sql_lead]] == '' and couple[partner_dict[sql_follow]] == '':
-            query = 'DELETE FROM {tn} WHERE {num} = ?'.format(tn=ref_partner_list, num=sql_no)
+        if couple[partner_dict['lead']] == '' and couple[partner_dict['follow']] == '':
+            query = 'DELETE FROM {tn} WHERE {num} = ?'.format(tn=ref_partner_list, num=partner_sql_dict['num'])
             cursor.execute(query, (couple_id,))
             connection.commit()
         query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE {id} = ?;'\
@@ -835,13 +816,13 @@ def update_city_beginners(cities_list, connection, cursor):
     """"Temp"""
     for city in cities_list:
         query = 'SELECT * FROM {tn} WHERE {city_lead} LIKE ?' \
-            .format(tn=partners_list, city_lead=sql_city_lead)
+            .format(tn=partners_list, city_lead=partner_sql_dict['city_lead'])
         number_of_city_beginners = len(cursor.execute(query, (city,)).fetchall())
         query = 'SELECT * FROM {tn} WHERE {city_follow} LIKE ?' \
-            .format(tn=partners_list, city_follow=sql_city_follow)
+            .format(tn=partners_list, city_follow=partner_sql_dict['city_follow'])
         number_of_city_beginners += len(cursor.execute(query, (city,)).fetchall())
         query = 'UPDATE {tn} SET {num} = ? WHERE {city} = ?' \
-            .format(tn=fixed_beginners_list, num=sql_num_con, city=sql_dict['city'])
+            .format(tn=fixed_beginners_list, num=city_sql_dict['number_of_contestants'], city=sql_dict['city'])
         cursor.execute(query, (number_of_city_beginners, city))
     connection.commit()
 
@@ -875,37 +856,43 @@ def create_city_lions_list(cities_list, connection, cursor):
 def update_city_lions(cities_list, connection, cursor):
     """"Temp"""
     for city in cities_list:
-        query = 'SELECT * FROM {tn} WHERE {city_lead} = ? '.format(tn=partners_list, city_lead=sql_city_lead)
+        query = 'SELECT * FROM {tn} WHERE {city_lead} = ? '\
+            .format(tn=partners_list, city_lead=partner_sql_dict['city_lead'])
         sql_filter = []
         for lvl in lion_participants:
             sql_filter.append('{ballroom_level_lead} = "{lvl}"'
-                              .format(ballroom_level_lead=sql_ballroom_level_lead, lvl=lvl))
-        sql_filter.append('{ballroom_level_lead} LIKE "%"'.format(ballroom_level_lead=sql_ballroom_level_lead))
+                              .format(ballroom_level_lead=partner_sql_dict['ballroom_level_lead'], lvl=lvl))
+        sql_filter.append('{ballroom_level_lead} LIKE "%"'
+                          .format(ballroom_level_lead=partner_sql_dict['ballroom_level_lead']))
         query += ' AND (' + ' OR '.join(sql_filter) + ')'
         sql_filter = []
         for lvl in lion_participants:
             sql_filter.append('{ballroom_level_follow} = "{lvl}"'
-                              .format(ballroom_level_follow=sql_ballroom_level_follow, lvl=lvl))
-        sql_filter.append('{ballroom_level_follow} LIKE "%"'.format(ballroom_level_follow=sql_ballroom_level_follow))
+                              .format(ballroom_level_follow=partner_sql_dict['ballroom_level_follow'], lvl=lvl))
+        sql_filter.append('{ballroom_level_follow} LIKE "%"'
+                          .format(ballroom_level_follow=partner_sql_dict['ballroom_level_follow']))
         query += ' AND (' + ' OR '.join(sql_filter) + ' )'
         number_of_city_lions = len(cursor.execute(query, (city,)).fetchall())
         #
-        query = 'SELECT * FROM {tn} WHERE {city_follow} = ? '.format(tn=partners_list, city_follow=sql_city_follow)
+        query = 'SELECT * FROM {tn} WHERE {city_follow} = ? '\
+            .format(tn=partners_list, city_follow=partner_sql_dict['city_follow'])
         sql_filter = []
         for lvl in lion_participants:
             sql_filter.append('{ballroom_level_lead} = "{lvl}"'
-                              .format(ballroom_level_lead=sql_ballroom_level_lead, lvl=lvl))
-        sql_filter.append('{ballroom_level_lead} LIKE "%"'.format(ballroom_level_lead=sql_ballroom_level_lead))
+                              .format(ballroom_level_lead=partner_sql_dict['ballroom_level_lead'], lvl=lvl))
+        sql_filter.append('{ballroom_level_lead} LIKE "%"'
+                          .format(ballroom_level_lead=partner_sql_dict['ballroom_level_lead']))
         query += ' AND (' + ' OR '.join(sql_filter) + ')'
         sql_filter = []
         for lvl in lion_participants:
             sql_filter.append('{ballroom_level_follow} = "{lvl}"'
-                              .format(ballroom_level_follow=sql_ballroom_level_follow, lvl=lvl))
-        sql_filter.append('{ballroom_level_follow} LIKE "%"'.format(ballroom_level_follow=sql_ballroom_level_follow))
+                              .format(ballroom_level_follow=partner_sql_dict['ballroom_level_follow'], lvl=lvl))
+        sql_filter.append('{ballroom_level_follow} LIKE "%"'
+                          .format(ballroom_level_follow=partner_sql_dict['ballroom_level_follow']))
         query += ' AND (' + ' OR '.join(sql_filter) + ' )'
         number_of_city_lions += len(cursor.execute(query, (city,)).fetchall())
         query = 'UPDATE {tn} SET {num} = ? WHERE {city} = ?' \
-            .format(tn=fixed_lions_list, num=sql_num_con, city=sql_dict['city'])
+            .format(tn=fixed_lions_list, num=city_sql_dict['number_of_contestants'], city=sql_dict['city'])
         cursor.execute(query, (number_of_city_lions, city))
     connection.commit()
 
@@ -952,6 +939,33 @@ def create_tables(connection, cursor):
     query = city_list_query.format(fixed_lions_list)
     cursor.execute(query)
     connection.commit()
+
+
+def check_available_signup_sheets():
+    """"Creates list of all competing cities"""
+    # Empty list that will contain the signup sheet file names for each of the teams
+    competing_cities_array = []
+    number_of_signup_sheets_found = 0
+    for k, v in participating_teams_dict.items():
+        competing_cities_array.append([v['team_name'], v['city'], v['signup_sheet']])
+    for row in competing_cities_array:
+        if os.path.isfile(path=row[team_dict['signup_list']]):
+            number_of_signup_sheets_found += 1
+        else:
+            status_print('')
+            status_print('Did not find the signup sheet of team {team} in the same directory as the program.'
+                         .format(team=row[team_dict['city']]))
+    if len(competing_cities_array) == 0:
+        status_print('')
+        status_print('No teams have been found in the config files.')
+        return False
+    elif number_of_signup_sheets_found == len(competing_cities_array):
+        return True
+    else:
+        status_print('')
+        status_print('The signup sheet of one or more teams that are supposed to enter the competition could not be '
+                     'found. Please place all of the signup sheets in the same folder as this program and try again.')
+        return False
 
 
 def create_competing_teams(connection, cursor):
@@ -1001,7 +1015,8 @@ def collect_city_overview(source_table, target_table, users, cursor, connection,
     else:
         query = 'SELECT * FROM {tn} ORDER BY {city}'.format(tn=source_table, city=sql_dict['city'])
     ordered_cities = cursor.execute(query).fetchall()
-    if gather_stats and collect_data:
+    # if gather_stats and collect_data:
+    if collect_data:
         query = 'CREATE TABLE IF NOT EXISTS {tn} (id INTEGER PRIMARY KEY AUTOINCREMENT'.format(tn=target_table)
         for city in ordered_cities:
             query += ', {city} INT'.format(city=city[0])
@@ -1021,7 +1036,6 @@ def collect_city_overview(source_table, target_table, users, cursor, connection,
     connection.commit()
 
 
-# TODO Format exported lists
 def export_excel_lists(cursor, timestamp, city=None):
     """"Creates an Excel file, containing a list of who got selected and who is on the waiting list.
     One file containing all the dancers is generated for the for the organization, as well as a separate for
@@ -1086,7 +1100,7 @@ def export_excel_lists(cursor, timestamp, city=None):
 
 def create_stats_file(cursor, timestamp):
     """"Temp"""
-    status_print('Exporting statistics file')
+    status_print('Exporting statistics file.')
     stats_title = get_competing_cities(cursor)
     stats_title.insert(0, 'run #')
     output_file = statistics_key['path'] + '_' + timestamp + xlsx_ext
@@ -1134,7 +1148,6 @@ def create_stats_file(cursor, timestamp):
     output_title = list(map(str, output_title))
     output_title = ['#'+x for x in output_title]
     output_title[0] = 'run #'
-    # TODO format contestant number
     output_data = list()
     output_data.append(output_title)
     output_data.extend(cursor.execute(query).fetchall())
@@ -1144,15 +1157,20 @@ def create_stats_file(cursor, timestamp):
             cell = worksheet.cell(row=row + 1, column=column + 1)
             cell.value = output_data[row][column]
     workbook.save(output_file)
+    output_db = statistics_key['path'] + '_' + timestamp + db_ext
+    status_print('Exporting database.')
+    status_print('')
+    shutil.copy2(database_key['path'], output_db)
     status_print('Finished exporting statistics')
+    # TODO add plots and statistics analysis
 
 
 def print_ntds_config():
     """"Displays the boundary conditions of the tournament in the welcome text"""
-    if user_boundaries:
-        status_print('Using user setting for boundary conditions.')
-    else:
-        status_print('Using default settings.')
+    # if user_boundaries:
+    #     status_print('Using user setting for boundary conditions.')
+    # else:
+    #     status_print('Using default settings.')
     status_print('')
     status_print('Contestant numbers for this NTDS selection:')
     status_print('')
@@ -1471,27 +1489,27 @@ def status_update():
         data_text.insert(END, 'Open Class Latin Follows: {num}\n'
                          .format(num=status_dict['number_of_open_latin_follows']))
         data_text.insert(END, '\n')
-    data_text.insert(END, 'First Aid: {yes} ({maybe})\n'.format(yes=status_dict['number_of_first_aid_yes'],
-                                                                maybe=status_dict['number_of_first_aid_maybe']))
-    data_text.insert(END, 'Emergency Response Officer: {yes} ({maybe})\n'
-                     .format(yes=status_dict['number_of_emergency_response_officer_yes'],
-                             maybe=status_dict['number_of_emergency_response_officer_maybe']))
+    data_text.insert(END, 'First Aid (Yes): {yes}\n'.format(yes=status_dict['number_of_first_aid_yes']))
+    data_text.insert(END, 'First Aid (Maybe): {maybe}\n'.format(maybe=status_dict['number_of_first_aid_maybe']))
+    data_text.insert(END, 'Emergency Response Officer (Yes): {yes}\n'
+                     .format(yes=status_dict['number_of_emergency_response_officer_yes']))
+    data_text.insert(END, 'Emergency Response Officer (Maybe): {maybe}\n'
+                     .format(maybe=status_dict['number_of_emergency_response_officer_maybe']))
     data_text.insert(END, '\n')
-    data_text.insert(END, 'Breitensport mandatory Ballroom blind daters: {num}\n'
+    data_text.insert(END, 'Breitensport mandatory Ballroom Blind Daters: {num}\n'
                      .format(num=status_dict['number_of_mandatory_breiten_ballroom_blind_daters']))
-    data_text.insert(END, 'Breitensport mandatory Latin blind daters: {num}\n'
+    data_text.insert(END, 'Breitensport mandatory Latin Blind Daters: {num}\n'
                      .format(num=status_dict['number_of_mandatory_breiten_latin_blind_daters']))
     data_text.insert(END, '\n')
-    data_text.insert(END, 'Ballroom juries: {yes} ({maybe})\n'
-                     .format(yes=status_dict['number_of_ballroom_jury_yes'],
-                             maybe=status_dict['number_of_ballroom_jury_maybe']))
-    data_text.insert(END, 'Latin juries {yes} ({maybe})\n'
-                     .format(yes=status_dict['number_of_latin_jury_yes'],
-                             maybe=status_dict['number_of_latin_jury_maybe']))
+    data_text.insert(END, 'Ballroom juries (Yes): {yes}\n'.format(yes=status_dict['number_of_ballroom_jury_yes']))
+    data_text.insert(END, 'Ballroom juries (Maybe): {maybe}\n'
+                     .format(maybe=status_dict['number_of_ballroom_jury_maybe']))
+    data_text.insert(END, 'Latin juries (Yes): {yes}\n'.format(yes=status_dict['number_of_latin_jury_yes']))
+    data_text.insert(END, 'Latin juries (Maybe): {maybe}\n'.format(maybe=status_dict['number_of_latin_jury_maybe']))
     data_text.insert(END, '\n')
-    data_text.insert(END, 'Volunteers: {yes} ({maybe})\n'
-                     .format(yes=status_dict['number_of_current_volunteer_yes'],
-                             maybe=status_dict['number_of_current_volunteer_maybe']))
+    data_text.insert(END, 'Volunteers (Yes): {yes}\n'.format(yes=status_dict['number_of_current_volunteer_yes']))
+    data_text.insert(END, 'Volunteers (Maybe): {maybe}\n'
+                     .format(maybe=status_dict['number_of_current_volunteer_maybe']))
     data_text.insert(END, 'Past volunteers: {yes}\n'.format(yes=status_dict['number_of_past_volunteer']))
     data_text.insert(END, '\n')
     data_text.insert(END, 'Sleeping spots: {yes}'.format(yes=status_dict['number_of_sleeping_spots']))
@@ -1503,15 +1521,16 @@ def status_update():
 
 def select_database(entry=None):
     """"Temp"""
-    old_database_name = database_key['db']
     if entry is None:
         ask_database = EntryBox('Please give the database name', (database_key, 'db'))
         root.wait_window(ask_database.top)
     else:
         database_key['db'] = entry
-    database_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), database_key['db'] + db_ext)
-    # database_key['path'] = database_key['db'] + db_ext
-    if os.path.isfile(path=database_key['path']) and old_database_name.lower() != database_key['db'].lower():
+    if database_key['db'].endswith(db_ext):
+        database_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), database_key['db'])
+    else:
+        database_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), database_key['db'] + db_ext)
+    if os.path.isfile(path=database_key['path']):
         status_text.config(state=NORMAL)
         status_text.delete('1.0', END)
         status_text.config(state=DISABLED)
@@ -1523,8 +1542,9 @@ def select_database(entry=None):
         status_update()
         sel_curs.close()
         sel_conn.close()
-    elif os.path.isfile(path=database_key['path']) is False or old_database_name.lower() != database_key['db'].lower():
-        status_print('"{name}" is not a valid database.'.format(name=database_key['path']))
+    elif os.path.isfile(path=database_key['path']) is False and database_key['name'] != '':
+        status_print('The file "{name}" does not exist.'.format(name=database_key['path']))
+        status_print('')
 
 
 def options_menu():
@@ -1633,9 +1653,9 @@ def list_volunteer(volunteer_role, cursor):
         status_print('')
 
 
-def select_random_volunteer(start_mesage, sql_var, cursor):
+def select_random_volunteer(start_message, sql_var, cursor):
     """"Temp"""
-    status_print(start_mesage)
+    status_print(start_message)
     query = 'SELECT * from {tn} WHERE {user_input} = ?'.format(tn=selection_list, user_input=sql_var)
     dancers = cursor.execute(query, (options_ymn['yes'],)).fetchall()
     if dancers is not None:
@@ -1652,6 +1672,37 @@ def select_random_volunteer(start_mesage, sql_var, cursor):
             cli_parser('', alternate_input=selectp + ' {id}'.format(id=dancer_id))
         else:
             status_print('There are no volunteers for this role to select')
+
+
+# TODO create import back list option
+def add_backup_list(backup_signup_list, city, connection, cursor):
+    if os.path.isfile(path=backup_signup_list):
+        query = 'SELECT max({id}) FROM {tn}'.format(id=sql_dict['id'], tn=signup_list)
+        max_contestant_number = cursor.execute(query).fetchone()[0]
+        # Get maximum number of rows and extract signup list
+        workbook = openpyxl.load_workbook(backup_signup_list, data_only=True)
+        worksheet = workbook.worksheets[0]
+        max_r = max_rc('row', worksheet)
+        city_signup_list = list(worksheet.iter_rows(min_col=1, min_row=2, max_col=max_col, max_row=max_r))
+        # Convert data to 2d list, replace None values with an empty string,
+        # increase the id numbers so that there are no duplicates, and add the city to the contestant
+        city_signup_list = [[cell.value for cell in row] for row in city_signup_list]
+        city_signup_list = [['' if elem is None else elem for elem in row] for row in city_signup_list]
+        city_signup_list = [[elem + max_contestant_number if isinstance(elem, int) else elem for elem in row]
+                            for row in city_signup_list]
+        for row in city_signup_list:
+            row.append(city)
+        # Copy the contestants to the SQL database
+        query = 'INSERT INTO {} VALUES ('.format(signup_list) + ('?,' * (max_col + 1))[:-1] + ');'
+        for row in city_signup_list:
+            cursor.execute(query, row)
+        query = 'INSERT INTO {} VALUES ('.format(backup_list) + ('?,' * (max_col + 1))[:-1] + ');'
+        for row in city_signup_list:
+            cursor.execute(query, row)
+        connection.commit()
+    else:
+        status_print('The file "{name}" does not exist.'.format(name=backup_signup_list))
+        status_print('')
 
 
 # CLI commands
@@ -1695,6 +1746,8 @@ print_contestants = 'print_contestants'
 print_breakdown = 'print_breakdown'
 finish_selection = 'finish_selection'
 export = 'export'
+create_stats = 'create_stats'
+import_backup = '-import_backup_list'
 
 rinput_fa = 'first_aid'
 rinput_ero = 'ERO'
@@ -1722,7 +1775,8 @@ def cli_parser(event, alternate_input=''):
                    list_backup_beginners, list_backup_breiten, list_backup_closed, list_backup_open,
                    list_cv, list_pv, list_fa, list_ero, list_ballroom_jury, list_latin_jury,
                    print_contestants, print_breakdown,
-                   finish_selection, export]
+                   finish_selection, export,
+                   import_backup]
     if command.startswith('-'):
         command = command.split(' ', 1)
         if len(command) > 1:
@@ -1730,30 +1784,35 @@ def cli_parser(event, alternate_input=''):
         else:
             user_input = ''
         command = command[0]
-    # TODO select multiple users at once
     if command in db_commands and os.path.isfile(database_key['path']) is True:
         if command == select:
             try:
-                selected_id = int(user_input)
-                query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_dict['id'])
-                dancer = cli_curs.execute(query, (selected_id,)).fetchone()
-                if dancer is not None:
-                    ballroom_partner = dancer[gen_dict['ballroom_partner']]
-                    latin_partner = dancer[gen_dict['latin_partner']]
-                    if ballroom_partner != '' or latin_partner != '':
-                        status_print('Dancer {num} signed with a partner, selecting both'.format(num=selected_id))
-                        partner_id = find_partner(selected_id, connection=connection, cursor=cli_curs,
-                                                  signed_partner_only=True)
-                        create_pair(selected_id, partner_id, connection=connection, cursor=cli_curs)
-                        move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
-                        move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
-                    else:
-                        status_print('Selecting dancer number {num} on his/her own'.format(num=selected_id))
-                        create_pair(selected_id, '', connection=connection, cursor=cli_curs)
-                        move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                user_input = user_input.split(',')
+                if len(user_input) > 1:
+                    for ind, user in enumerate(user_input):
+                        cli_parser('', alternate_input=select + ' {id}'.format(id=user_input[ind]))
                 else:
-                    status_print('Dancer {num} is not on the selection list, '
-                                 'and can therefor not be selected for the tournament'.format(num=selected_id))
+                    user_input = user_input[0]
+                    selected_id = int(user_input)
+                    query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_dict['id'])
+                    dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                    if dancer is not None:
+                        ballroom_partner = dancer[gen_dict['ballroom_partner']]
+                        latin_partner = dancer[gen_dict['latin_partner']]
+                        if ballroom_partner != '' or latin_partner != '':
+                            status_print('Dancer {num} signed with a partner, selecting both'.format(num=selected_id))
+                            partner_id = find_partner(selected_id, connection=connection, cursor=cli_curs,
+                                                      signed_partner_only=True)
+                            create_pair(selected_id, partner_id, connection=connection, cursor=cli_curs)
+                            move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                            move_selected_contestant(partner_id, connection=connection, cursor=cli_curs)
+                        else:
+                            status_print('Selecting dancer number {num} on his/her own'.format(num=selected_id))
+                            create_pair(selected_id, '', connection=connection, cursor=cli_curs)
+                            move_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                    else:
+                        status_print('Dancer {num} is not on the selection list, '
+                                     'and can therefor not be selected for the tournament'.format(num=selected_id))
             except ValueError:
                 status_print('No/Incorrect user number given.')
         elif command == selectp:
@@ -1790,11 +1849,13 @@ def cli_parser(event, alternate_input=''):
                 dancer = cli_curs.execute(query, (selected_id,)).fetchone()
                 if dancer is not None:
                     partner_id = ''
-                    query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_lead)
+                    query = 'SELECT * FROM {tn} WHERE {role} = ?'\
+                        .format(tn=ref_partner_list, role=partner_sql_dict['lead'])
                     couple = cli_curs.execute(query, (selected_id,)).fetchall()
                     role = ''
                     if len(couple) == 0:
-                        query = 'SELECT * FROM {tn} WHERE {role} = ?'.format(tn=ref_partner_list, role=sql_follow)
+                        query = 'SELECT * FROM {tn} WHERE {role} = ?'\
+                            .format(tn=ref_partner_list, role=partner_sql_dict['follow'])
                         couple = cli_curs.execute(query, (selected_id,)).fetchall()
                         if len(couple) != 0:
                             role = roles['follow']
@@ -1802,9 +1863,9 @@ def cli_parser(event, alternate_input=''):
                         role = roles['lead']
                     couple = couple[0]
                     if role == roles['lead']:
-                        partner_id = couple[partner_dict[sql_follow]]
+                        partner_id = couple[partner_dict['follow']]
                     elif role == roles['follow']:
-                        partner_id = couple[partner_dict[sql_lead]]
+                        partner_id = couple[partner_dict['lead']]
                     if partner_id != '':
                         status_print('Removing dancers number {sel} and {par} from the NTDS.'
                                      .format(sel=selected_id, par=partner_id))
@@ -1943,8 +2004,8 @@ def cli_parser(event, alternate_input=''):
                         .format(tn=selected_list, city=sql_dict['city'], temp={})
                     query = query.format(entries[0])
                     number_of_selected_city_dancers = len(cli_curs.execute(query, (entries[1], city)).fetchall())
-                    # TODO formatting
                     status_print('{level}, {division}:\t\t {num}'
+
                                  .format(division=print_dict[entries[0]], level=entries[1],
                                          num=number_of_selected_city_dancers))
         elif command == export:
@@ -1969,10 +2030,14 @@ def cli_parser(event, alternate_input=''):
             status_print('Export complete.')
             status_print('Exported files can be found in the folder:')
             status_print('"{folder}"'.format(folder=output_key['path'].replace(output_key['name'], '')))
+        elif command == create_stats:
+            create_stats_file(cursor=cli_curs, timestamp=str(round(time.time())))
+        # -import_backup_list NTDS_Groningen_Backup.xlsx Groningen
+        elif command == import_backup:
+            add_backup_list(user_input.split(' ')[0], user_input.split(' ')[1], connection=connection, cursor=cli_curs)
     if command in open_commands:
         if command == echo:
             status_print(command)
-            create_stats_file(cursor=cli_curs, timestamp=str(round(time.time())))
         elif command == help_com:
             command_help_text()
         elif command == exit_com:
@@ -1986,8 +2051,6 @@ def cli_parser(event, alternate_input=''):
                 iterations = int(user_input)
             except ValueError:
                 iterations = runs
-            global gather_stats
-            gather_stats = True
             duration = time.time()
             timestamp = str(round(time.time()))
             status_path = status_key['path'] + '_' + timestamp + ini_ext
@@ -2020,7 +2083,7 @@ def cli_parser(event, alternate_input=''):
                     create_stats_file(cursor=cli_curs, timestamp=timestamp)
                 else:
                     status_print('Cancelling statistics gathering.')
-            gather_stats = False
+            # gather_stats = False
         elif command == db:
             selected_db = str(user_input)
             select_database(entry=selected_db)
@@ -2045,10 +2108,12 @@ def main_selection():
     start_time = time.time()
     # Connect to database and create a cursor
     status_print('')
+    # Exit loop if no signup sheets are available
+    if check_available_signup_sheets() is False:
+        return None
     status_print('Creating new database...')
     status_print('Database name: {name}'.format(name=default_db_name+db_ext))
     database_key['db'] = default_db_name
-    # database_key['path'] = database_key['db'] + db_ext
     database_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), database_key['db'] + db_ext)
     conn = sql.connect(database_key['path'])
     curs = conn.cursor()
@@ -2059,8 +2124,6 @@ def main_selection():
     # Create competing cities list
     competing_teams = create_competing_teams(connection=conn, cursor=curs)
     competing_cities = get_competing_cities(cursor=curs)
-    # Get maximum number of columns
-    max_col = len(template_values)
     # Copy the signup list from every team into the SQL database
     total_signup_list = list()
     total_number_of_contestants = 0
@@ -2092,7 +2155,7 @@ def main_selection():
             query = 'INSERT INTO {} VALUES ('.format(selection_list) + ('?,' * (max_col + 1))[:-1] + ');'
             for row in city_signup_list:
                 curs.execute(query, row)
-            total_number_of_contestants += max_r - 1
+            total_number_of_contestants += len(city_signup_list)
         else:
             status_print('{city} is not entering the tournament'.format(city=city))
         conn.commit()
@@ -2113,7 +2176,9 @@ def main_selection():
         captain_selected = curs.execute(query, (captain_id,)).fetchone()
         if captain_selected is None:
             partner_id = find_partner(captain_id, connection=conn, cursor=curs)
-            # TODO Add comment that if no partner is found, select the partner alone
+            if partner_id is None:
+                status_print('No partner found for contestant number {num}.'.format(num=captain_id))
+                status_print('Selecting contestant without a partner because he/she is a team captain.')
             create_pair(captain_id, partner_id, connection=conn, cursor=curs)
             move_selected_contestant(captain_id, connection=conn, cursor=curs)
             move_selected_contestant(partner_id, connection=conn, cursor=curs)
@@ -2157,16 +2222,18 @@ def main_selection():
         status_print('Selecting guaranteed beginners for each team...')
         create_city_beginners_list(competing_cities, connection=conn, cursor=curs)
         query = 'SELECT sum({max_beg})-sum({num}) FROM {tn}'\
-            .format(tn=fixed_beginners_list, max_beg=sql_max_con, num=sql_num_con)
+            .format(tn=fixed_beginners_list, max_beg=city_sql_dict['max_contestants'],
+                    num=city_sql_dict['number_of_contestants'])
         max_iterations = curs.execute(query).fetchone()[0]
         for iteration in range(max_iterations):
-            query = 'SELECT * FROM {tn} ORDER BY {num}, RANDOM()'.format(tn=fixed_beginners_list, num=sql_num_con)
+            query = 'SELECT * FROM {tn} ORDER BY {num}, RANDOM()'\
+                .format(tn=fixed_beginners_list, num=city_sql_dict['number_of_contestants'])
             ordered_cities = curs.execute(query).fetchall()
             selected_city = None
             for city in ordered_cities:
                 if selected_city is None:
-                    number_of_selected_city_beginners = city[city_dict[sql_num_con]]
-                    max_number_of_selected_city_beginners = city[city_dict[sql_max_con]]
+                    number_of_selected_city_beginners = city[city_dict['number_of_contestants']]
+                    max_number_of_selected_city_beginners = city[city_dict['max_contestants']]
                     if (max_number_of_selected_city_beginners - number_of_selected_city_beginners) > 0:
                         selected_city = city[city_dict[sql_dict['city']]]
             if selected_city is not None:
@@ -2208,14 +2275,16 @@ def main_selection():
                                                     update_city_beginners(competing_cities, connection=conn,
                                                                           cursor=curs)
         # Select beginner that were guaranteed entry, but could not be matched due to lack of partners
-        query = 'SELECT * FROM {tn} ORDER BY {num}, RANDOM()'.format(tn=fixed_beginners_list, num=sql_num_con)
+        query = 'SELECT * FROM {tn} ORDER BY {num}, RANDOM()'\
+            .format(tn=fixed_beginners_list, num=city_sql_dict['number_of_contestants'])
         ordered_cities = curs.execute(query).fetchall()
         for iteration in range(len(ordered_cities) * boundaries['min_guaranteed_beginners']):
-            query = 'SELECT * FROM {tn} ORDER BY {num}, RANDOM()'.format(tn=fixed_beginners_list, num=sql_num_con)
+            query = 'SELECT * FROM {tn} ORDER BY {num}, RANDOM()'\
+                .format(tn=fixed_beginners_list, num=city_sql_dict['number_of_contestants'])
             ordered_cities = curs.execute(query).fetchall()
             for city in ordered_cities:
-                number_of_city_beginners = city[city_dict[sql_num_con]]
-                max_number_of_city_beginners = city[city_dict[sql_max_con]]
+                number_of_city_beginners = city[city_dict['number_of_contestants']]
+                max_number_of_city_beginners = city[city_dict['max_contestants']]
                 city = city[city_dict[sql_dict['city']]]
                 if (max_number_of_city_beginners - number_of_city_beginners) > 0:
                     query = 'SELECT * FROM {tn1} WHERE ({ballroom_level} = ? OR {latin_level} = ?) AND {city} = ?' \
@@ -2241,16 +2310,18 @@ def main_selection():
     status_print('Selecting guaranteed lions for each team...')
     create_city_lions_list(competing_cities, connection=conn, cursor=curs)
     query = 'SELECT sum({max_lion})-sum({num}) FROM {tn}' \
-        .format(tn=fixed_lions_list, max_lion=sql_max_con, num=sql_num_con)
+        .format(tn=fixed_lions_list, max_lion=city_sql_dict['max_contestants'],
+                num=city_sql_dict['number_of_contestants'])
     max_iterations = curs.execute(query).fetchone()[0]
     for iteration in range(max_iterations):
-        query = 'SELECT * FROM {tn} ORDER BY {num}, RANDOM()'.format(tn=fixed_lions_list, num=sql_num_con)
+        query = 'SELECT * FROM {tn} ORDER BY {num}, RANDOM()'.format(tn=fixed_lions_list,
+                                                                     num=city_sql_dict['number_of_contestants'])
         ordered_cities = curs.execute(query).fetchall()
         selected_city = None
         for city in ordered_cities:
             if selected_city is None:
-                number_of_selected_city_lions = city[city_dict[sql_num_con]]
-                max_number_of_city_lions = city[city_dict[sql_max_con]]
+                number_of_selected_city_lions = city[city_dict['number_of_contestants']]
+                max_number_of_city_lions = city[city_dict['max_contestants']]
                 if(max_number_of_city_lions - number_of_selected_city_lions) > 0:
                     selected_city = city[city_dict[sql_dict['city']]]
         if selected_city is not None:
@@ -2304,31 +2375,31 @@ def main_selection():
                           cursor=curs, connection=conn, collect_data=True)
     collect_city_overview(source_table=selected_list, target_table=contestants_list, users=contestants,
                           cursor=curs, connection=conn, collect_data=True)
-    if gather_stats:
-        query = 'SELECT * FROM {tn}'.format(tn=signup_list)
-        all_dancers = curs.execute(query).fetchall()
-        query = 'SELECT name FROM sqlite_master WHERE type = ? AND name = ?'
-        individual_table_exists = len(curs.execute(query, ('table', individual_list)).fetchall())
-        if individual_table_exists == 0:
-            query = 'CREATE TABLE IF NOT EXISTS {tn} ({run} INTEGER PRIMARY KEY, '\
-                .format(tn=individual_list, run=sql_run)
-            for dancer in all_dancers:
-                dancer_id = dancer[gen_dict['id']]
-                query += ('"' + str(dancer_id) + '" INT, ')
-            query = query[:-2]
-            query += ')'
-            curs.execute(query)
-        query = 'SELECT {run} FROM {tn}'.format(tn=individual_list, run=sql_run)
-        this_run = len(curs.execute(query).fetchall()) + 1
-        query = 'INSERT INTO {tn} ({run}) VALUES (?)'.format(tn=individual_list, run=sql_run)
-        curs.execute(query, (this_run,))
+    # if gather_stats:
+    query = 'SELECT * FROM {tn}'.format(tn=signup_list)
+    all_dancers = curs.execute(query).fetchall()
+    query = 'SELECT name FROM sqlite_master WHERE type = ? AND name = ?'
+    individual_table_exists = len(curs.execute(query, ('table', individual_list)).fetchall())
+    if individual_table_exists == 0:
+        query = 'CREATE TABLE IF NOT EXISTS {tn} ({run} INTEGER PRIMARY KEY, '\
+            .format(tn=individual_list, run=sql_run)
         for dancer in all_dancers:
             dancer_id = dancer[gen_dict['id']]
-            query = 'SELECT * FROM {tn} WHERE {id} = ?'.format(id=sql_dict['id'], tn=selected_list)
-            dancer_selected = len(curs.execute(query, (dancer_id,)).fetchall())
-            query = 'UPDATE {tn} SET "{col}" = ? WHERE {run} = ?'.format(tn=individual_list, run=sql_run, col=dancer_id)
-            curs.execute(query, (dancer_selected, this_run))
-        conn.commit()
+            query += ('"' + str(dancer_id) + '" INT, ')
+        query = query[:-2]
+        query += ')'
+        curs.execute(query)
+    query = 'SELECT {run} FROM {tn}'.format(tn=individual_list, run=sql_run)
+    this_run = len(curs.execute(query).fetchall()) + 1
+    query = 'INSERT INTO {tn} ({run}) VALUES (?)'.format(tn=individual_list, run=sql_run)
+    curs.execute(query, (this_run,))
+    for dancer in all_dancers:
+        dancer_id = dancer[gen_dict['id']]
+        query = 'SELECT * FROM {tn} WHERE {id} = ?'.format(id=sql_dict['id'], tn=selected_list)
+        dancer_selected = len(curs.execute(query, (dancer_id,)).fetchall())
+        query = 'UPDATE {tn} SET "{col}" = ? WHERE {run} = ?'.format(tn=individual_list, run=sql_run, col=dancer_id)
+        curs.execute(query, (dancer_selected, this_run))
+    conn.commit()
     # Update status
     status_update()
     # Close cursor and connection

@@ -7,6 +7,8 @@ from loting import total_width, xlsx_ext, levels, options_yn, options_ymn, gen_d
 import time
 import re
 
+# TODO aangeven wanneer iemand zichzelf als partner heeft opgegeven
+
 CODES = {'error': 'ERROR: ', 'warning': 'WARNING: '}
 email_format = re.compile('^.*@.*\..*$')
 
@@ -24,7 +26,7 @@ beginner_combo = 'Contestant number {con} is a Beginner in {cat}, but not in {ca
 
 signed_up_together = 'Contestants number {con} and number {par} signed up together for {cat}.'
 not_signed_up_together = 'Contestant number {con} signed up with contestant number {par} in {cat}, ' \
-                         'but contestant number {par} did not sign up with contestant number {con}.'
+                         'but contestant number {par} did not sign up with contestant number {con} as well.'
 opposite_roles = 'Contestants number {con} and {par} have opposite roles in {cat}.'
 matching_roles = 'Contestants number {con} and {par} have selected the same role in {cat}.'
 same_levels = 'Contestants number {con} and {par} are dancing at the same level in {cat}.'
@@ -102,12 +104,8 @@ def welcome_text():
 
 
 def select_file():
-    """"Temp"""
-    if file_key['name'].endswith(xlsx_ext):
-        old_name = file_key['name']
-    else:
-        old_name = file_key['name'] + xlsx_ext
-    ask_database = EntryBox('Please give the file name', (file_key, 'name'))
+    """"Used to select a file to check for errors."""
+    ask_database = EntryBox('Enter the name of your registration file (NTDS_"TEAMNAME")', (file_key, 'name'))
     root.wait_window(ask_database.top)
     if file_key['name'].endswith(xlsx_ext):
         file_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), file_key['name'])
@@ -121,14 +119,13 @@ def select_file():
         status_print('')
         time.sleep(0.3)
         check_file()
-    elif (os.path.isfile(path=file_key['path']) is False or old_name.lower() != file_key['name'].lower()) \
-            and file_key['name'] != '':
+    elif os.path.isfile(path=file_key['path']) is False and file_key['name'] != '':
         status_print('The file "{name}" does not exist.'.format(name=file_key['name']))
         status_print('')
 
 
 def check_contestants(contestants_list):
-    """"Temp"""
+    """"Checks contestants for errors in the signup sheets."""
     for row in contestants_list:
         contestant_number = row[gen_dict['id']]
         status_print('Checking contestant {num}.'.format(num=contestant_number))
@@ -517,7 +514,7 @@ def check_contestants(contestants_list):
 
 
 def check_for_errors(text, code):
-    """"Temp"""
+    """"Returns list of errors."""
     text = text.split('\n')
     if code == CODES['error']:
         text = [x for x in text if x.startswith(code)]
@@ -537,10 +534,12 @@ def check_for_errors(text, code):
 
 
 def check_duplicates(text):
-    """Temp"""
+    """Checks for duplicates in the error text (ex: error with 2 and 6, and 6 and 2) and returns a list without them."""
     non_duplicates = list()
     for t in text:
         warning_numbers = [int(s) for s in t.split() if s.isdigit()]
+        if len(warning_numbers) > 2:
+            warning_numbers = list(set(warning_numbers))
         if len(warning_numbers) == 2:
             test_str = swap(t, str(warning_numbers[1]), str(warning_numbers[0]))
             if test_str not in non_duplicates:
@@ -552,7 +551,7 @@ def check_duplicates(text):
 
 
 def check_file():
-    """Temp"""
+    """Main program"""
     update_button.config(state=DISABLED)
     status_print('Checking file: {file}'.format(file=file_key['path']))
     time.sleep(1)
@@ -607,7 +606,7 @@ def check_file():
         status_print('No errors or warnings were found in the file "{file}".'.format(file=file_key['path']))
         status_print('The tested signup sheet is OK.')
     else:
-        status_print('One or more errors/warnings were found. Please see the list printed above.')
+        status_print('One or more errors and/or warnings were found. Please see the list printed above.')
     update_button.config(state=NORMAL)
 
 
