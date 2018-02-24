@@ -21,6 +21,8 @@ import pathlib
 
 template_password = 'NTDS2018'
 
+# TODO Remove leading and trailing spaces from names and other options
+
 # Program constants
 total_width = 190
 status_text_width = 140
@@ -28,9 +30,15 @@ default_db_name = 'NTDS'
 db_ext = '.db'
 xlsx_ext = '.xlsx'
 ini_ext = '.ini'
-database_key = {'db': '', 'path': ''}
+database_key = {'db': '', 'path': '', 'session_timestamp': ''}
 max_row = 201
 runs = 1000
+backup_ext = '_Backup' + xlsx_ext
+
+# Formatting names
+lions = 'Lions'
+contestants = 'contestants'
+individuals = 'individuals'
 
 # Folder names
 config_folder = 'config'
@@ -38,6 +46,7 @@ settings_folder = 'settings'
 output_folder = 'output'
 statistics_folder = 'statistics'
 sheets_folder = 'signupsheets_captains'
+used_sheets_folder = 'used_signupsheets'
 
 # Setup configuration and setting files dictionaries
 config_key = {'name': 'config.ini', 'folder': config_folder, 'path': ''}
@@ -73,6 +82,10 @@ statistics_key = {'name': 'NTDS_Statistics', 'folder': statistics_folder, 'path'
 statistics_key['folder'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), statistics_key['folder'])
 statistics_key['path'] = os.path.join(statistics_key['folder'], statistics_key['name'])
 
+used_sheets_key = {'name': '', 'folder': used_sheets_folder, 'path': ''}
+used_sheets_key['folder'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), used_sheets_key['folder'])
+used_sheets_key['path'] = os.path.join(used_sheets_key['folder'], used_sheets_key['name'])
+
 status_key = {'name': 'NTDS_Status', 'folder': statistics_folder, 'path': ''}
 status_key['folder'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), status_key['folder'])
 status_key['path'] = os.path.join(status_key['folder'], status_key['name'])
@@ -83,6 +96,7 @@ pathlib.Path(settings_key['folder']).mkdir(parents=True, exist_ok=True)
 pathlib.Path(sheets_key['folder']).mkdir(parents=True, exist_ok=True)
 pathlib.Path(output_key['folder']).mkdir(parents=True, exist_ok=True)
 pathlib.Path(statistics_key['folder']).mkdir(parents=True, exist_ok=True)
+pathlib.Path(used_sheets_key['folder']).mkdir(parents=True, exist_ok=True)
 
 # WISHLIST
 # TODO refactor (remove hardcoded material that snuck in)
@@ -289,6 +303,7 @@ with xlsxwriter.Workbook(excel_template_key['path']) as wb:
 # Create signup sheets for team captains to fill in
 for key, value in participating_teams_dict.items():
     shutil.copy2(excel_template_key['path'], os.path.join(sheets_key['folder'], value['signup_sheet']))
+    shutil.copy2(excel_template_key['path'], os.path.join(sheets_key['folder'], value['signup_sheet'].replace(xlsx_ext,backup_ext)))
 
 # General dictionary
 gen_dict = dict()
@@ -320,11 +335,6 @@ beginners_list = 'beginners'
 lions_list = 'lions'
 contestants_list = 'contestants'
 individual_list = 'individuals'
-
-# Formatting names
-lions = 'Lions'
-contestants = 'contestants'
-individuals = 'individuals'
 
 # Selectable options
 options_dict = {lvls: levels, rls: roles, yn: options_yn, ymn: options_ymn}
@@ -373,8 +383,15 @@ city_list_query = 'CREATE TABLE {tn} ({city} TEXT, {num} INT, {max_num} INT);' \
 
 
 status_dict = dict()
-# Get maximum number of columns
 max_col = len(template_values)
+
+
+def move_used_signupsheet(file_name):
+    """"Temp"""
+    new_path = os.path.join(used_sheets_key['folder'], time.strftime('%Y_%d_%m_%H_%M_%S', time.localtime(database_key['session_timestamp'])))
+    if not os.path.exists(new_path):
+        os.makedirs(new_path)
+    os.rename(os.path.join(os.path.dirname(os.path.realpath(__file__)), file_name), os.path.join(new_path, file_name))
 
 
 def find_partner(identifier, connection, cursor, city=None, signed_partner_only=False):
@@ -746,9 +763,9 @@ def delete_selected_contestant(identifier, connection, cursor):
     """"Temp"""
     if identifier is not None:
         status_print('Contestant {num} cancelled his/her signup for the NTDS.'.format(num=identifier))
-        remove_selected_contestant(identifier, connection=connection, cursor=cursor)
-        query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=selected_list, id=sql_dict['id'])
-        cursor.execute(query, (identifier,))
+        # remove_selected_contestant(identifier, connection=connection, cursor=cursor)
+        # query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=selected_list, id=sql_dict['id'])
+        # cursor.execute(query, (identifier,))
         query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=selection_list, id=sql_dict['id'])
         cursor.execute(query, (identifier,))
         query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE {id} = ?;' \
@@ -760,11 +777,35 @@ def delete_selected_contestant(identifier, connection, cursor):
 def reinstate_selected_contestant(identifier, connection, cursor):
     """"Temp"""
     if identifier is not None:
-        status_print('Put 0contestant {num} back on the list to be eligible for selection.'.format(num=identifier))
+        status_print('Put contestant {num} back on the list to be eligible for selection.'.format(num=identifier))
         query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=cancelled_list, id=sql_dict['id'])
         cursor.execute(query, (identifier,))
         query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE {id} = ?;' \
             .format(tn1=selection_list, tn2=signup_list, id=sql_dict['id'])
+        cursor.execute(query, (identifier,))
+        connection.commit()
+
+
+def include_selected_contestant(identifier, connection, cursor):
+    """"Temp"""
+    if identifier is not None:
+        status_print('Put contestant {num} on the list to be eligible for selection.'.format(num=identifier))
+        query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=backup_list, id=sql_dict['id'])
+        cursor.execute(query, (identifier,))
+        query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE {id} = ?;' \
+            .format(tn1=selection_list, tn2=signup_list, id=sql_dict['id'])
+        cursor.execute(query, (identifier,))
+        connection.commit()
+
+
+def exclude_selected_contestant(identifier, connection, cursor):
+    """"Temp"""
+    if identifier is not None:
+        status_print('Put contestant {num} on the backup list.'.format(num=identifier))
+        query = 'DELETE FROM {tn} WHERE {id} = ?'.format(tn=selection_list, id=sql_dict['id'])
+        cursor.execute(query, (identifier,))
+        query = 'INSERT INTO {tn1} SELECT * FROM {tn2} WHERE {id} = ?;' \
+            .format(tn1=backup_list, tn2=signup_list, id=sql_dict['id'])
         cursor.execute(query, (identifier,))
         connection.commit()
 
@@ -1254,7 +1295,8 @@ def command_help_text():
     status_print('Lists all dancers available for selection that can be a Latin Jury.')
     status_print('')
     status_print(select + ' n')
-    status_print('Selects contestant number "n" (and their signed partner) for the NTDS.')
+    status_print('Selects contestant number "n" (and their signed partner) for the NTDS. '
+                 '"n" can be a list of numbers to select a range of contestants at once.')
     status_print('')
     status_print(selectp + ' n')
     status_print('Selects contestant number "n", and a (virtual) partner for the NTDS.')
@@ -1279,6 +1321,10 @@ def command_help_text():
     status_print('Select a random dancers that can volunteer as a First Aid Officer, an Emergency Response Officer, '
                  'a Ballroom jury or a Latin jury respectively.')
     status_print('')
+    status_print(switchlf + ' n')
+    status_print('Switches the roles from contestant number "n" from {lead}/{lead} to {follow}/{follow} or the other '
+                 'way around. "n" can be a list of numbers to select a range of contestants at once.')
+    status_print('')
     status_print(print_contestants)
     status_print('Prints a list of how much contestants each city has had selected.')
     status_print('')
@@ -1291,6 +1337,10 @@ def command_help_text():
     status_print('')
     status_print(export)
     status_print('Creates Excel files containing the selection data.')
+    status_print('')
+    status_print(import_backup)
+    status_print('Imports a second wave of contestants into the database. These contestants will be placed in a '
+                 'separate table.')
     status_print('')
     status_print(stats + ' n')
     status_print('Simulates the automatic selection process "n" times (default {runs}), '
@@ -1443,6 +1493,11 @@ def status_update():
     status_dict['number_of_sleeping_spots'] = \
         len(status_cursor.execute(query, (NTDS_options['sleeping_location']['yes'],)).fetchall())
 
+    query = 'SELECT * FROM {tn} WHERE {student} = ?' \
+        .format(tn=selected_list, student=sql_dict['student'])
+    status_dict['number_of_students'] = \
+        len(status_cursor.execute(query, (NTDS_options['student']['yes'],)).fetchall())
+
     data_text.config(state=NORMAL)
     data_text.delete('1.0', END)
     data_text.insert(END, 'Selected database name: {name}\n'.format(name=database_key['db'] + db_ext))
@@ -1513,6 +1568,8 @@ def status_update():
     data_text.insert(END, 'Past volunteers: {yes}\n'.format(yes=status_dict['number_of_past_volunteer']))
     data_text.insert(END, '\n')
     data_text.insert(END, 'Sleeping spots: {yes}'.format(yes=status_dict['number_of_sleeping_spots']))
+    data_text.insert(END, '\n')
+    data_text.insert(END, 'Students: {yes}'.format(yes=status_dict['number_of_students']))
     data_text.see(END)
     data_text.config(state=DISABLED)
     status_cursor.close()
@@ -1530,6 +1587,7 @@ def select_database(entry=None):
         database_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), database_key['db'])
     else:
         database_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), database_key['db'] + db_ext)
+    database_key['session_timestamp'] = round(time.time())
     if os.path.isfile(path=database_key['path']):
         status_text.config(state=NORMAL)
         status_text.delete('1.0', END)
@@ -1700,9 +1758,11 @@ def add_backup_list(backup_signup_list, city, connection, cursor):
         for row in city_signup_list:
             cursor.execute(query, row)
         connection.commit()
+        return len(city_signup_list)
     else:
         status_print('The file "{name}" does not exist.'.format(name=backup_signup_list))
         status_print('')
+        return 0
 
 
 # CLI commands
@@ -1720,6 +1780,9 @@ removep = '-removep'
 delete = '-delete'
 reinstate = '-reinstate'
 selectr = '-selectr'
+switchlf = '-switchlf'
+include = '-include'
+exclude = '-exclude'
 list_selected = 'list_selected'
 list_available = 'list_available'
 list_cancelled = 'list_cancelled'
@@ -1747,7 +1810,7 @@ print_breakdown = 'print_breakdown'
 finish_selection = 'finish_selection'
 export = 'export'
 create_stats = 'create_stats'
-import_backup = '-import_backup_list'
+import_backup = 'import_backup_lists'
 
 rinput_fa = 'first_aid'
 rinput_ero = 'ERO'
@@ -1768,7 +1831,7 @@ def cli_parser(event, alternate_input=''):
     cli_curs = connection.cursor()
     open_commands = [echo, help_com, exit_com,
                      stats, db]
-    db_commands = [select, selectp, remove, removep, delete, reinstate, selectr,
+    db_commands = [select, selectp, remove, removep, delete, reinstate, selectr, switchlf, include, exclude,
                    list_selected, list_available, list_cancelled, list_backup,
                    list_selected_beginners, list_selected_breiten, list_selected_closed, list_selected_open,
                    list_available_beginners, list_available_breiten, list_available_closed, list_available_open,
@@ -1832,14 +1895,20 @@ def cli_parser(event, alternate_input=''):
                 status_print('No/Incorrect user number given.')
         elif command == remove:
             try:
-                selected_id = int(user_input)
-                query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selected_list, id=sql_dict['id'])
-                dancer = cli_curs.execute(query, (selected_id,)).fetchone()
-                if dancer is not None:
-                    remove_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                user_input = user_input.split(',')
+                if len(user_input) > 1:
+                    for ind, user in enumerate(user_input):
+                        cli_parser('', alternate_input=remove + ' {id}'.format(id=user_input[ind]))
                 else:
-                    status_print('Dancer {num} is not on the selected list, '
-                                 'and can therefor not be removed from the tournament.'.format(num=selected_id))
+                    user_input = user_input[0]
+                    selected_id = int(user_input)
+                    query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selected_list, id=sql_dict['id'])
+                    dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                    if dancer is not None:
+                        remove_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                    else:
+                        status_print('Dancer {num} is not on the selected list, '
+                                     'and can therefor not be removed from the tournament.'.format(num=selected_id))
             except ValueError:
                 status_print('No/Incorrect user number given.')
         elif command == removep:
@@ -1878,20 +1947,80 @@ def cli_parser(event, alternate_input=''):
                 status_print('No/Incorrect user number given.')
         elif command == delete:
             try:
-                selected_id = int(user_input)
-                delete_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                user_input = user_input.split(',')
+                if len(user_input) > 1:
+                    for ind, user in enumerate(user_input):
+                        cli_parser('', alternate_input=delete + ' {id}'.format(id=user_input[ind]))
+                else:
+                    user_input = user_input[0]
+                    selected_id = int(user_input)
+                    query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selected_list, id=sql_dict['id'])
+                    dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                    if dancer is not None:
+                        remove_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                        delete_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                    else:
+                        query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_dict['id'])
+                        dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                        if dancer is not None:
+                            delete_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                        else:
+                            status_print('Dancer {num} is not on the selection list, '
+                                         'and can therefor not be removed from the tournament.'.format(num=selected_id))
             except ValueError:
                 status_print('No/Incorrect user number given.')
         elif command == reinstate:
             try:
-                selected_id = int(user_input)
-                query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=cancelled_list, id=sql_dict['id'])
-                dancer = cli_curs.execute(query, (selected_id,)).fetchone()
-                if dancer is not None:
-                    reinstate_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                user_input = user_input.split(',')
+                if len(user_input) > 1:
+                    for ind, user in enumerate(user_input):
+                        cli_parser('', alternate_input=reinstate + ' {id}'.format(id=user_input[ind]))
                 else:
-                    status_print('Dancer {num} is not on the cancelled list, '
-                                 'and is already a part of the tournament selection process.'.format(num=selected_id))
+                    user_input = user_input[0]
+                    selected_id = int(user_input)
+                    query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=cancelled_list, id=sql_dict['id'])
+                    dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                    if dancer is not None:
+                        reinstate_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                    else:
+                        status_print('Dancer {num} is not on the cancelled list, '
+                                     'and is already a part of the tournament selection process.'.format(num=selected_id))
+            except ValueError:
+                status_print('No/Incorrect user number given.')
+        elif command == include:
+            try:
+                user_input = user_input.split(',')
+                if len(user_input) > 1:
+                    for ind, user in enumerate(user_input):
+                        cli_parser('', alternate_input=include + ' {id}'.format(id=user_input[ind]))
+                else:
+                    user_input = user_input[0]
+                    selected_id = int(user_input)
+                    query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=backup_list, id=sql_dict['id'])
+                    dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                    if dancer is not None:
+                        include_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                    else:
+                        status_print('Dancer {num} is not on the backup list, '
+                                     'and can therefor not be moved to the selection list.'.format(num=selected_id))
+            except ValueError:
+                status_print('No/Incorrect user number given.')
+        elif command == exclude:
+            try:
+                user_input = user_input.split(',')
+                if len(user_input) > 1:
+                    for ind, user in enumerate(user_input):
+                        cli_parser('', alternate_input=include + ' {id}'.format(id=user_input[ind]))
+                else:
+                    user_input = user_input[0]
+                    selected_id = int(user_input)
+                    query = 'SELECT * from {tn} WHERE {id} =?'.format(tn=selection_list, id=sql_dict['id'])
+                    dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                    if dancer is not None:
+                        exclude_selected_contestant(selected_id, connection=connection, cursor=cli_curs)
+                    else:
+                        status_print('Dancer {num} is not on the selection list, '
+                                     'and can therefor not be moved to the backup list.'.format(num=selected_id))
             except ValueError:
                 status_print('No/Incorrect user number given.')
         elif command == selectr:
@@ -1921,6 +2050,65 @@ def cli_parser(event, alternate_input=''):
                                         sql_dict['latin_jury'], cursor=cli_curs)
             else:
                 status_print(user_input + ' is not a valid input.')
+        elif command == switchlf:
+            try:
+                user_input = user_input.split(',')
+                if len(user_input) > 1:
+                    for ind, user in enumerate(user_input):
+                        cli_parser('', alternate_input=switchlf + ' {id}'.format(id=user_input[ind]))
+                else:
+                    user_input = user_input[0]
+                    selected_id = int(user_input)
+                    query = 'SELECT * from {tn} WHERE {id} = ?'.format(tn=signup_list, id=sql_dict['id'])
+                    dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                    dancer_role = None
+                    dancer_ballroom_role = None
+                    if dancer is not None:
+                        dancer_ballroom_role = dancer[gen_dict['ballroom_role']]
+                        dancer_latin_role = dancer[gen_dict['latin_role']]
+                        if dancer_ballroom_role == dancer_latin_role:
+                            if dancer_ballroom_role == roles['lead']:
+                                dancer_role = roles['follow']
+                            elif dancer_ballroom_role == roles['follow']:
+                                dancer_role = roles['lead']
+                    if dancer_role is not None:
+                        query = 'UPDATE {tn} SET {ballroom_role} = ?, {latin_role} = ? WHERE {id} = ?'\
+                            .format(tn=signup_list, ballroom_role=sql_dict['ballroom_role'],
+                                    latin_role=sql_dict['latin_role'], id=sql_dict['id'])
+                        cli_curs.execute(query, (dancer_role, dancer_role, selected_id))
+                        query = 'SELECT * from {tn} WHERE {id} = ?'.format(tn=selection_list, id=sql_dict['id'])
+                        dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                        if dancer is not None:
+                            query = 'UPDATE {tn} SET {ballroom_role} = ?, {latin_role} = ? WHERE {id} = ?' \
+                                .format(tn=selection_list, ballroom_role=sql_dict['ballroom_role'],
+                                        latin_role=sql_dict['latin_role'], id=sql_dict['id'])
+                            cli_curs.execute(query, (dancer_role, dancer_role, selected_id))
+                        query = 'SELECT * from {tn} WHERE {id} = ?'.format(tn=selected_list, id=sql_dict['id'])
+                        dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                        if dancer is not None:
+                            query = 'UPDATE {tn} SET {ballroom_role} = ?, {latin_role} = ? WHERE {id} = ?' \
+                                .format(tn=selected_list, ballroom_role=sql_dict['ballroom_role'],
+                                        latin_role=sql_dict['latin_role'], id=sql_dict['id'])
+                            cli_curs.execute(query, (dancer_role, dancer_role, selected_id))
+                        query = 'SELECT * from {tn} WHERE {id} = ?'.format(tn=backup_list, id=sql_dict['id'])
+                        dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                        if dancer is not None:
+                            query = 'UPDATE {tn} SET {ballroom_role} = ?, {latin_role} = ? WHERE {id} = ?' \
+                                .format(tn=backup_list, ballroom_role=sql_dict['ballroom_role'],
+                                        latin_role=sql_dict['latin_role'], id=sql_dict['id'])
+                            cli_curs.execute(query, (dancer_role, dancer_role, selected_id))
+                        query = 'SELECT * from {tn} WHERE {id} = ?'.format(tn=cancelled_list, id=sql_dict['id'])
+                        dancer = cli_curs.execute(query, (selected_id,)).fetchone()
+                        if dancer is not None:
+                            query = 'UPDATE {tn} SET {ballroom_role} = ?, {latin_role} = ? WHERE {id} = ?' \
+                                .format(tn=cancelled_list, ballroom_role=sql_dict['ballroom_role'],
+                                        latin_role=sql_dict['latin_role'], id=sql_dict['id'])
+                            cli_curs.execute(query, (dancer_role, dancer_role, selected_id))
+                        status_print('Changed dancer number {id} roles from {before}/{before} to {after}/{after}.'
+                                     .format(id=str(selected_id), before=dancer_ballroom_role, after=dancer_role))
+                        connection.commit()
+            except ValueError:
+                status_print('No/Incorrect user number given.')
 
         # List contestants (from a certain class) from specific lists
         elif command == list_selected:
@@ -2034,7 +2222,17 @@ def cli_parser(event, alternate_input=''):
             create_stats_file(cursor=cli_curs, timestamp=str(round(time.time())))
         # -import_backup_list NTDS_Groningen_Backup.xlsx Groningen
         elif command == import_backup:
-            add_backup_list(user_input.split(' ')[0], user_input.split(' ')[1], connection=connection, cursor=cli_curs)
+            # TODO
+            for k, v in participating_teams_dict.items():
+                backup_sheet = v['signup_sheet'].replace(xlsx_ext, backup_ext)
+                if os.path.exists(backup_sheet):
+                    number_of_added_backup_dancers = add_backup_list(backup_sheet, v['city'],
+                                                                     connection=connection, cursor=cli_curs)
+                    status_print('Added ' + str(number_of_added_backup_dancers) + ' contestants from team ' + v['city']
+                                 + '.')
+                    move_used_signupsheet(backup_sheet)
+                else:
+                    status_print('Team ' + v['city'] + ' has no backup dancers.')
     if command in open_commands:
         if command == echo:
             status_print(command)
@@ -2110,11 +2308,13 @@ def main_selection():
     status_print('')
     # Exit loop if no signup sheets are available
     if check_available_signup_sheets() is False:
+        cli_text.config(state=NORMAL)
         return None
     status_print('Creating new database...')
     status_print('Database name: {name}'.format(name=default_db_name+db_ext))
     database_key['db'] = default_db_name
     database_key['path'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), database_key['db'] + db_ext)
+    database_key['session_timestamp'] = round(time.time())
     conn = sql.connect(database_key['path'])
     curs = conn.cursor()
     # Create SQL tables
@@ -2156,6 +2356,7 @@ def main_selection():
             for row in city_signup_list:
                 curs.execute(query, row)
             total_number_of_contestants += len(city_signup_list)
+            move_used_signupsheet(team_signup_list)
         else:
             status_print('{city} is not entering the tournament'.format(city=city))
         conn.commit()

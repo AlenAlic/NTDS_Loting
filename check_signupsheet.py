@@ -3,11 +3,12 @@ import textwrap
 from classes.entrybox import EntryBox
 import os
 import openpyxl
-from loting import total_width, xlsx_ext, levels, options_yn, options_ymn, gen_dict
+from loting import xlsx_ext, levels, options_yn, options_ymn, gen_dict
 import time
 import re
 
-# TODO aangeven wanneer iemand zichzelf als partner heeft opgegeven
+total_width = 150
+# TODO opgegeven nummers controleren op dat ze niet buiten de lijst vallen
 
 CODES = {'error': 'ERROR: ', 'warning': 'WARNING: '}
 email_format = re.compile('^.*@.*\..*$')
@@ -23,6 +24,8 @@ number_not_exist = 'Contestant {con} signed up with a partner in {cat} that does
 
 single = 'Contestant number {con} signed up as a Blind Dater in {cat}.'
 beginner_combo = 'Contestant number {con} is a Beginner in {cat}, but not in {cat2}.'
+
+own_partner = 'Contestant number {con} signed up with himself/herself as his/her own partner in {cat}.'
 
 signed_up_together = 'Contestants number {con} and number {par} signed up together for {cat}.'
 not_signed_up_together = 'Contestant number {con} signed up with contestant number {par} in {cat}, ' \
@@ -65,7 +68,7 @@ def swap(text, ch1, ch2):
     return text
 
 
-def status_print(message, wrap=True, code=None):
+def status_print(message, wrap=False, code=None):
     """"Prints the message passed to the program screen"""
     if code in list(CODES.values()):
         # if code == CODES['error']:
@@ -96,7 +99,7 @@ def welcome_text():
     status_print('DISCLAIMER:')
     status_print('This program can only check for system errors, for example two Followers that signed up as partners '
                  'together. Registering into the Open Class instead of the Breitensport by accident, '
-                 'and similar errors will NOT be flagged.')
+                 'and similar errors will NOT be flagged.', wrap=True)
     status_print('')
     status_text.config(state=NORMAL)
     status_text.config(wrap=NONE)
@@ -149,12 +152,19 @@ def check_contestants(contestants_list):
         contestant_latin_role = row[gen_dict['latin_role']]
         contestant_latin_bd = row[gen_dict['latin_mandatory_blind_date']]
 
+        # Check if contestant is a Beginner in one discipline but something else in the other
         if contestant_ballroom_level == levels['beginners'] and contestant_latin_level != levels['beginners'] \
                 and contestant_latin_level != '':
             status_print(beginner_combo.format(con=contestant_number, cat=ballroom, cat2=latin), code=CODES['error'])
         if contestant_ballroom_level != levels['beginners'] and contestant_ballroom_level != '' \
                 and contestant_latin_level == levels['beginners']:
             status_print(beginner_combo.format(con=contestant_number, cat=latin, cat2=ballroom), code=CODES['error'])
+
+        # Check if a contestant has singed up with him/herself as a partner
+        if contestant_ballroom_partner_number == contestant_number:
+            status_print(own_partner.format(con=contestant_number, cat=ballroom), code=CODES['error'])
+        if contestant_latin_partner_number == contestant_number:
+            status_print(own_partner.format(con=contestant_number, cat=ballroom), code=CODES['error'])
 
         # Contestant signed up alone for both categories without a partner
         if contestant_ballroom_partner_number == '' and contestant_latin_partner_number == '':
@@ -544,7 +554,7 @@ def check_duplicates(text):
             test_str = swap(t, str(warning_numbers[1]), str(warning_numbers[0]))
             if test_str not in non_duplicates:
                 non_duplicates.append(t)
-        elif len(warning_numbers) == 1:
+        elif len(warning_numbers) == 1 or len(warning_numbers) == 0:
             if t not in non_duplicates:
                 non_duplicates.append(t)
     return non_duplicates
@@ -612,7 +622,8 @@ def check_file():
 
 if __name__ == "__main__":
     root = Tk()
-    root.geometry("1600x900")
+    # root.geometry("1600x900")
+    root.geometry("1366x768")
     root.state('zoomed')
     root.title('NTDS Signup Sheet Check-O-Matic 3000')
     pad_out = 8
@@ -623,7 +634,7 @@ if __name__ == "__main__":
     x_scrollbar.grid(row=1, column=0, padx=pad_in, sticky=E+W)
     y_scrollbar = Scrollbar(master=frame, orient=VERTICAL)
     y_scrollbar.grid(row=0, column=1, pady=pad_in, sticky=N+S)
-    status_text = Text(master=frame, width=total_width, height=50, padx=pad_in, pady=pad_in,
+    status_text = Text(master=frame, width=total_width, height=36, padx=pad_in, pady=pad_in,
                        xscrollcommand=x_scrollbar.set, yscrollcommand=y_scrollbar.set, state=DISABLED, wrap=NONE)
     status_text.grid(row=0, column=0, padx=pad_out)
     x_scrollbar.config(command=status_text.xview)
