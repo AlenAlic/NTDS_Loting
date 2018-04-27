@@ -137,7 +137,7 @@ options_ymn = {'yes': 'Ja', 'maybe': 'Misschien', 'no': 'Nee'}
 options_yn = {'yes': options_ymn['yes'], 'no': options_ymn['no']}
 
 # Boundaries
-boundaries = {'max_contestants': 400, 'min_guaranteed_beginners': 4, 'min_fixed_lion_contestants': 10,
+boundaries = {'max_contestants': 300, 'min_guaranteed_beginners': 4, 'min_fixed_lion_contestants': 10,
               'beginner_signup_cutoff_percentage': 20, 'buffer_for_selection_percentage': 10}
 # Participating classes
 classes = [levels['beginners'], levels['breitensport'], levels['open_class']]
@@ -516,108 +516,108 @@ def find_partner(identifier, connection, cursor, city=None, signed_partner_only=
                 if number_of_potential_partners > 0:
                     random_num = randint(0, number_of_potential_partners - 1)
                     partner_id = potential_partners[random_num][gen_dict['id']]
-            # if partner_id is None:
-            #     query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? ' \
-            #             'AND {ballroom_partner} = "" AND {latin_partner} = "" ' \
-            #             'AND {ballroom_role} != ? AND latin_role != ? '\
-            #         .format(tn=selection_list,
-            #                 ballroom_level=sql_dict['ballroom_level'], latin_level=sql_dict['latin_level'],
-            #                 ballroom_partner=sql_dict['ballroom_partner'], latin_partner=sql_dict['latin_partner'],
-            #                 ballroom_role=sql_dict['ballroom_role'], latin_role=sql_dict['latin_role'])
-            #     if city is None:
-            #         query += ' AND {team} != ?'.format(team=sql_dict['city'])
-            #     else:
-            #         query += ' AND {team} = ?'.format(team=sql_dict['city'])
-            #         team = city
-            # # Try to find a partner for a beginner, beginner combination
-            # if all([ballroom_level == levels['beginners'], latin_level == levels['beginners'],
-            #         partner_id is None, number_of_potential_partners == 0]):
-            #     potential_partners += cursor.execute(query, (levels['beginners'], '', ballroom_role, '', team))\
-            #         .fetchall()
-            #     potential_partners += cursor.execute(query, ('', levels['beginners'], '', latin_role, team)).fetchall()
-            # # Try to find a partner for a levels['beginners'], Null combination
-            # if all([ballroom_level == levels['beginners'], latin_level == '',
-            #         number_of_potential_partners == 0, partner_id is None]):
-            #     potential_partners += cursor.\
-            #         execute(query, (levels['beginners'], levels['beginners'], ballroom_role, ballroom_role, team))\
-            #         .fetchall()
-            # # Try to find a partner for a Null, beginner combination
-            # if all([ballroom_level == '', latin_level == levels['beginners'],
-            #         number_of_potential_partners == 0, partner_id is None]):
-            #     potential_partners += cursor.\
-            #         execute(query, (levels['beginners'], levels['beginners'], latin_role, latin_role, team)).fetchall()
-            # # Try to find a partner for a breiten, breiten combination
-            # if all([ballroom_level == levels['breitensport'], latin_level == levels['breitensport'],
-            #         number_of_potential_partners == 0, partner_id is None]):
-            #     potential_partners += cursor.execute(query, (levels['breitensport'], '', ballroom_role, '', team))\
-            #         .fetchall()
-            #     potential_partners += cursor.execute(query, ('', levels['breitensport'], '', latin_role, team))\
-            #         .fetchall()
-            #     potential_partners += cursor.execute(query, (levels['breitensport'], levels['open_class'],
-            #                                                  ballroom_role, latin_role, team)).fetchall()
-            #     potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
-            #                                                  ballroom_role, latin_role, team)).fetchall()
-            # # Try to find a partner for a breiten, Null combination
-            # if all([ballroom_level == levels['breitensport'], latin_level == '',
-            #         number_of_potential_partners == 0, partner_id is None]):
-            #     potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
-            #                                                  ballroom_role, ballroom_role, team)).fetchall()
-            #     potential_partners += cursor.execute(query, (levels['breitensport'], levels['open_class'],
-            #                                                  ballroom_role, ballroom_role, team)).fetchall()
-            # # Try to find a partner for a Null, Breiten combination
-            # if all([ballroom_level == '', latin_level == levels['breitensport'],
-            #         number_of_potential_partners == 0, partner_id is None]):
-            #     potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
-            #                                                  latin_role, latin_role, team)).fetchall()
-            #     potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
-            #                                                  latin_role, latin_role, team)).fetchall()
-            # # Try to find a partner for a Breiten, Open combination
-            # if all([ballroom_level == levels['breitensport'], latin_level == levels['open_class'],
-            #         number_of_potential_partners == 0, partner_id is None]):
-            #     potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
-            #                                                  ballroom_role, latin_role, team)).fetchall()
-            #     potential_partners += cursor.execute(query, (levels['breitensport'], '', ballroom_role, '', team))\
-            #         .fetchall()
-            #     potential_partners += cursor.execute(query, (levels['open_class'], levels['open_class'],
-            #                                                  ballroom_role, latin_role, team)).fetchall()
-            #     potential_partners += cursor.execute(query, ('', levels['open_class'], '', latin_role, team)).fetchall()
-            # # Try to find a partner for a Open, Breiten combination
-            # if all([ballroom_level == levels['open_class'], latin_level == levels['breitensport'],
-            #         number_of_potential_partners == 0, partner_id is None]):
-            #     potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
-            #                                                  ballroom_role, latin_role, team)).fetchall()
-            #     potential_partners += cursor.execute(query, ('', levels['breitensport'], '', latin_role, team))\
-            #         .fetchall()
-            #     potential_partners += cursor.execute(query, (levels['open_class'], levels['open_class'],
-            #                                                  ballroom_role, latin_role, team)).fetchall()
-            #     potential_partners += cursor.execute(query, (levels['open_class'], '', ballroom_role, '', team))\
-            #         .fetchall()
-            # # Try to find a partner for a Open, Open combination
-            # if all([ballroom_level == levels['open_class'], latin_level == levels['open_class'],
-            #         number_of_potential_partners == 0, partner_id is None]):
-            #     potential_partners += cursor.execute(query, (levels['breitensport'], levels['open_class'],
-            #                                                  ballroom_role, latin_role, team)).fetchall()
-            #     potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
-            #                                                  ballroom_role, latin_role, team)).fetchall()
-            #     potential_partners += cursor.execute(query, (levels['open_class'], '', ballroom_role, '', team))\
-            #         .fetchall()
-            #     potential_partners += cursor.execute(query, ('', levels['open_class'], '', latin_role, team)).fetchall()
-            # # Try to find a partner for a Open, Null combination
-            # if all([ballroom_level == levels['open_class'], latin_level == '',
-            #         number_of_potential_partners == 0, partner_id is None]):
-            #     potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
-            #                                                  ballroom_role, ballroom_role, team)).fetchall()
-            #     potential_partners += cursor\
-            #         .execute(query, (levels['open_class'], levels['open_class'], ballroom_role, ballroom_role, team))\
-            #         .fetchall()
-            # # Try to find a partner for a Null, Open combination
-            # if all([ballroom_level == '', latin_level == levels['open_class'],
-            #         number_of_potential_partners == 0, partner_id is None]):
-            #     potential_partners += cursor\
-            #         .execute(query, (levels['breitensport'], levels['open_class'], latin_role, latin_role, team))\
-            #         .fetchall()
-            #     potential_partners += cursor.execute(query, (levels['open_class'], levels['open_class'],
-            #                                                  latin_role, latin_role, team)).fetchall()
+            if partner_id is None:
+                query = 'SELECT * FROM {tn} WHERE {ballroom_level} = ? AND {latin_level} = ? ' \
+                        'AND {ballroom_partner} = "" AND {latin_partner} = "" ' \
+                        'AND {ballroom_role} != ? AND latin_role != ? '\
+                    .format(tn=selection_list,
+                            ballroom_level=sql_dict['ballroom_level'], latin_level=sql_dict['latin_level'],
+                            ballroom_partner=sql_dict['ballroom_partner'], latin_partner=sql_dict['latin_partner'],
+                            ballroom_role=sql_dict['ballroom_role'], latin_role=sql_dict['latin_role'])
+                if city is None:
+                    query += ' AND {team} != ?'.format(team=sql_dict['city'])
+                else:
+                    query += ' AND {team} = ?'.format(team=sql_dict['city'])
+                    team = city
+            # Try to find a partner for a beginner, beginner combination
+            if all([ballroom_level == levels['beginners'], latin_level == levels['beginners'],
+                    partner_id is None, number_of_potential_partners == 0]):
+                potential_partners += cursor.execute(query, (levels['beginners'], '', ballroom_role, '', team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, ('', levels['beginners'], '', latin_role, team)).fetchall()
+            # Try to find a partner for a levels['beginners'], Null combination
+            if all([ballroom_level == levels['beginners'], latin_level == '',
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.\
+                    execute(query, (levels['beginners'], levels['beginners'], ballroom_role, ballroom_role, team))\
+                    .fetchall()
+            # Try to find a partner for a Null, beginner combination
+            if all([ballroom_level == '', latin_level == levels['beginners'],
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.\
+                    execute(query, (levels['beginners'], levels['beginners'], latin_role, latin_role, team)).fetchall()
+            # Try to find a partner for a breiten, breiten combination
+            if all([ballroom_level == levels['breitensport'], latin_level == levels['breitensport'],
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (levels['breitensport'], '', ballroom_role, '', team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, ('', levels['breitensport'], '', latin_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, (levels['breitensport'], levels['open_class'],
+                                                             ballroom_role, latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
+                                                             ballroom_role, latin_role, team)).fetchall()
+            # Try to find a partner for a breiten, Null combination
+            if all([ballroom_level == levels['breitensport'], latin_level == '',
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
+                                                             ballroom_role, ballroom_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (levels['breitensport'], levels['open_class'],
+                                                             ballroom_role, ballroom_role, team)).fetchall()
+            # Try to find a partner for a Null, Breiten combination
+            if all([ballroom_level == '', latin_level == levels['breitensport'],
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
+                                                             latin_role, latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
+                                                             latin_role, latin_role, team)).fetchall()
+            # Try to find a partner for a Breiten, Open combination
+            if all([ballroom_level == levels['breitensport'], latin_level == levels['open_class'],
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
+                                                             ballroom_role, latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (levels['breitensport'], '', ballroom_role, '', team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['open_class'],
+                                                             ballroom_role, latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, ('', levels['open_class'], '', latin_role, team)).fetchall()
+            # Try to find a partner for a Open, Breiten combination
+            if all([ballroom_level == levels['open_class'], latin_level == levels['breitensport'],
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (levels['breitensport'], levels['breitensport'],
+                                                             ballroom_role, latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, ('', levels['breitensport'], '', latin_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['open_class'],
+                                                             ballroom_role, latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (levels['open_class'], '', ballroom_role, '', team))\
+                    .fetchall()
+            # Try to find a partner for a Open, Open combination
+            if all([ballroom_level == levels['open_class'], latin_level == levels['open_class'],
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (levels['breitensport'], levels['open_class'],
+                                                             ballroom_role, latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
+                                                             ballroom_role, latin_role, team)).fetchall()
+                potential_partners += cursor.execute(query, (levels['open_class'], '', ballroom_role, '', team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, ('', levels['open_class'], '', latin_role, team)).fetchall()
+            # Try to find a partner for a Open, Null combination
+            if all([ballroom_level == levels['open_class'], latin_level == '',
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['breitensport'],
+                                                             ballroom_role, ballroom_role, team)).fetchall()
+                potential_partners += cursor\
+                    .execute(query, (levels['open_class'], levels['open_class'], ballroom_role, ballroom_role, team))\
+                    .fetchall()
+            # Try to find a partner for a Null, Open combination
+            if all([ballroom_level == '', latin_level == levels['open_class'],
+                    number_of_potential_partners == 0, partner_id is None]):
+                potential_partners += cursor\
+                    .execute(query, (levels['breitensport'], levels['open_class'], latin_role, latin_role, team))\
+                    .fetchall()
+                potential_partners += cursor.execute(query, (levels['open_class'], levels['open_class'],
+                                                             latin_role, latin_role, team)).fetchall()
         # If there is a potential partner, randomly select one
         if partner_id is None:
             number_of_potential_partners = len(potential_partners)
@@ -630,7 +630,7 @@ def find_partner(identifier, connection, cursor, city=None, signed_partner_only=
             status_print('Matched {id1} and {id2} together'.format(id1=identifier, id2=partner_id))
         elif partner_id == identifier:
             status_print('TEMP')
-        # status_update()
+        status_update()
     return partner_id
 
 
